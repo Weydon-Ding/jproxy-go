@@ -1,0 +1,18 @@
+services:
+  jproxy-go:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    image: jproxy-go:v0.1.0
+    container_name: jproxy-go
+    restart: unless-stopped
+    ports:
+      - "8117:8117"
+    environment:
+      ADDR: ":8117"
+      JACKETT_URL: "http://host.docker.internal:9117"
+      PROWLARR_URL: "http://host.docker.internal:9696"
+      MIN_COUNT: "6"
+      INDEXER_RESULT_CACHE_EXPIRES: "15"
+      CACHE_EXPIRES: "4320"
+      HTTP_TIMEOUT_SECONDS: "60"

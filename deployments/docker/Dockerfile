@@ -11,4 +11,5 @@ USER app
 WORKDIR /app
 COPY --from=builder /out/jproxy /app/jproxy
 EXPOSE 8117
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8117/health || exit 1
 ENTRYPOINT ["/app/jproxy"]
