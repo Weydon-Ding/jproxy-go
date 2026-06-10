@@ -123,16 +123,24 @@ func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q 
 func (s *Server) executeRequest(r *http.Request, backend string, q url.Values) (string, error) {
 	upstream := s.upstreamURL(backend, r.URL.Path)
 	u, err := url.Parse(upstream)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	resp, err := s.client.Do(req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return string(b), nil
 }
 
@@ -147,11 +155,15 @@ func (s *Server) upstreamURL(backend, path string) string {
 }
 
 func calculateCurrentIndex(offset int, offsets []int) int {
-	if offset == 0 { return 0 }
-	for i, v := range offsets {
-		if v >= offset { return i }
+	if offset == 0 {
+		return 0
 	}
-	return len(offsets)-1
+	for i, v := range offsets {
+		if v >= offset {
+			return i
+		}
+	}
+	return len(offsets) - 1
 }
 
 func makeCacheKey(r *http.Request) string {
@@ -173,12 +185,16 @@ func cloneQuery(q url.Values) url.Values {
 
 func intParam(q url.Values, key string, def int) int {
 	v, err := strconv.Atoi(q.Get(key))
-	if err != nil { return def }
+	if err != nil {
+		return def
+	}
 	return v
 }
 
 func writeXML(w http.ResponseWriter, xml string) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	_, err := w.Write([]byte(xml))
-	if err != nil { log.Printf("write response: %v", err) }
+	if err != nil {
+		log.Printf("write response: %v", err)
+	}
 }
