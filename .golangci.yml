@@ -1,0 +1,9 @@
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - misspell
+    - revive
+run:
+  timeout: 3m
