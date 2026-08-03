@@ -66,6 +66,66 @@ Or with Compose:
 docker compose -f deployments/docker/docker-compose.yml up -d --build
 ```
 
+### Podman integration test stack
+
+The repository includes a local Podman Compose stack for testing jproxy-go with
+Prowlarr, Jackett, Sonarr, and Radarr. It uses `docker.m.daocloud.io` mirrors for
+the `linuxserver/*arr` images because direct Docker Hub access can be unreliable
+in some networks.
+
+Start the stack from the repository root:
+
+```bat
+podman compose -f deployments/podman/compose.yml up -d --build
+```
+
+Exposed ports:
+
+| Service | URL |
+|---|---|
+| jproxy-go | `http://127.0.0.1:8117/health` |
+| Prowlarr | `http://127.0.0.1:9696` |
+| Jackett | `http://127.0.0.1:9117` |
+| Sonarr | `http://127.0.0.1:8989` |
+| Radarr | `http://127.0.0.1:7878` |
+
+Inside the Compose network, jproxy-go is configured with these upstream URLs:
+
+```text
+JACKETT_URL=http://jackett:9117
+PROWLARR_URL=http://prowlarr:9696
+```
+
+Use the Compose service name when configuring test indexers from the Sonarr/Radarr
+web UI. For example, a Prowlarr indexer with ID `1` should use the base URL
+`http://jproxy-go:8117/sonarr/prowlarr/1/` in Sonarr and API path `/api`.
+
+```text
+Jackett for Sonarr:
+http://jproxy-go:8117/sonarr/jackett/api/v2.0/indexers/all/results/torznab
+
+Prowlarr for Sonarr:
+http://jproxy-go:8117/sonarr/prowlarr/1/
+
+Jackett for Radarr:
+http://jproxy-go:8117/radarr/jackett/api/v2.0/indexers/all/results/torznab
+
+Prowlarr for Radarr:
+http://jproxy-go:8117/radarr/prowlarr/1/
+```
+
+Stop the stack while keeping the named volumes:
+
+```bat
+podman compose -f deployments/podman/compose.yml down
+```
+
+Reset all test data:
+
+```bat
+podman compose -f deployments/podman/compose.yml down -v
+```
+
 ## Environment variables
 
 See `configs/jproxy.env.example`.

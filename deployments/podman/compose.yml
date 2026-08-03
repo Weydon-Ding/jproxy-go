@@ -1,0 +1,103 @@
+services:
+  jproxy-go:
+    build:
+      context: ../..
+      dockerfile: deployments/podman/Dockerfile
+    image: jproxy-go:test
+    container_name: jproxy-go-test
+    restart: unless-stopped
+    depends_on:
+      - prowlarr
+      - jackett
+    ports:
+      - "8117:8117"
+    environment:
+      ADDR: ":8117"
+      JACKETT_URL: "http://jackett:9117"
+      PROWLARR_URL: "http://prowlarr:9696"
+      MIN_COUNT: "6"
+      INDEXER_RESULT_CACHE_EXPIRES: "15"
+      CACHE_EXPIRES: "4320"
+      HTTP_TIMEOUT_SECONDS: "60"
+    networks:
+      - jproxy-test
+
+  prowlarr:
+    image: docker.m.daocloud.io/linuxserver/prowlarr:latest
+    container_name: jproxy-test-prowlarr
+    restart: unless-stopped
+    ports:
+      - "9696:9696"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - prowlarr-config:/config
+    networks:
+      - jproxy-test
+
+  jackett:
+    image: docker.m.daocloud.io/linuxserver/jackett:latest
+    container_name: jproxy-test-jackett
+    restart: unless-stopped
+    ports:
+      - "9117:9117"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - jackett-config:/config
+      - jackett-downloads:/downloads
+    networks:
+      - jproxy-test
+
+  sonarr:
+    image: docker.m.daocloud.io/linuxserver/sonarr:latest
+    container_name: jproxy-test-sonarr
+    restart: unless-stopped
+    ports:
+      - "8989:8989"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - sonarr-config:/config
+      - sonarr-tv:/tv
+      - sonarr-downloads:/downloads
+    networks:
+      - jproxy-test
+
+  radarr:
+    image: docker.m.daocloud.io/linuxserver/radarr:latest
+    container_name: jproxy-test-radarr
+    restart: unless-stopped
+    ports:
+      - "7878:7878"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - radarr-config:/config
+      - radarr-movies:/movies
+      - radarr-downloads:/downloads
+    networks:
+      - jproxy-test
+
+networks:
+  jproxy-test:
+    name: jproxy-test
+
+volumes:
+  prowlarr-config:
+  jackett-config:
+  jackett-downloads:
+  sonarr-config:
+  sonarr-tv:
+  sonarr-downloads:
+  radarr-config:
+  radarr-movies:
+  radarr-downloads:
