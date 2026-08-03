@@ -14,5 +14,7 @@ services:
       PROWLARR_URL: "http://host.docker.internal:9696"
       MIN_COUNT: "6"
       INDEXER_RESULT_CACHE_EXPIRES: "15"
+      RESULT_CACHE_MAX_ENTRIES: "1000"
       CACHE_EXPIRES: "4320"
+      OFFSET_CACHE_MAX_ENTRIES: "1000"
       HTTP_TIMEOUT_SECONDS: "60"

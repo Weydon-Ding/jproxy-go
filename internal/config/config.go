@@ -8,13 +8,15 @@ import (
 )
 
 type Config struct {
-	Addr                    string
-	JackettURL              string
-	ProwlarrURL             string
-	MinCount                int
-	IndexerResultCacheTTL   time.Duration
-	OffsetCacheTTL          time.Duration
-	HTTPTimeout             time.Duration
+	Addr                  string
+	JackettURL            string
+	ProwlarrURL           string
+	MinCount              int
+	IndexerResultCacheTTL time.Duration
+	ResultCacheMaxEntries int
+	OffsetCacheTTL        time.Duration
+	OffsetCacheMaxEntries int
+	HTTPTimeout           time.Duration
 }
 
 func LoadConfig() Config {
@@ -24,7 +26,9 @@ func LoadConfig() Config {
 		ProwlarrURL:           trimRightSlash(env("PROWLARR_URL", "http://127.0.0.1:9696")),
 		MinCount:              envInt("MIN_COUNT", 6),
 		IndexerResultCacheTTL: time.Duration(envInt("INDEXER_RESULT_CACHE_EXPIRES", 15)) * time.Minute,
+		ResultCacheMaxEntries: envInt("RESULT_CACHE_MAX_ENTRIES", 1000),
 		OffsetCacheTTL:        time.Duration(envInt("CACHE_EXPIRES", 4320)) * time.Minute,
+		OffsetCacheMaxEntries: envInt("OFFSET_CACHE_MAX_ENTRIES", 1000),
 		HTTPTimeout:           time.Duration(envInt("HTTP_TIMEOUT_SECONDS", 60)) * time.Second,
 	}
 }

@@ -25,8 +25,8 @@ func NewServer(cfg config.Config) *Server {
 	return &Server{
 		cfg:         cfg,
 		client:      &http.Client{Timeout: cfg.HTTPTimeout},
-		resultCache: cache.NewTTLCache[string](cfg.IndexerResultCacheTTL),
-		offsetCache: cache.NewTTLCache[[]int](cfg.OffsetCacheTTL),
+		resultCache: cache.NewTTLCache[string](cfg.IndexerResultCacheTTL, cfg.ResultCacheMaxEntries),
+		offsetCache: cache.NewTTLCache[[]int](cfg.OffsetCacheTTL, cfg.OffsetCacheMaxEntries),
 	}
 }
 

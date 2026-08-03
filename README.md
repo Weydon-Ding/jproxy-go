@@ -137,7 +137,9 @@ See `configs/jproxy.env.example`.
 | `PROWLARR_URL` | `http://127.0.0.1:9696` | Upstream Prowlarr base URL. |
 | `MIN_COUNT` | `6` | If merged results are fewer than this, try additional basic search titles. |
 | `INDEXER_RESULT_CACHE_EXPIRES` | `15` | Result cache TTL in minutes. |
+| `RESULT_CACHE_MAX_ENTRIES` | `1000` | Maximum number of cached XML result entries. |
 | `CACHE_EXPIRES` | `4320` | Offset cache TTL in minutes. |
+| `OFFSET_CACHE_MAX_ENTRIES` | `1000` | Maximum number of cached offset entries. |
 | `HTTP_TIMEOUT_SECONDS` | `60` | Upstream HTTP timeout in seconds. |
 
 ## Sonarr/Radarr indexer URLs
