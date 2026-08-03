@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -137,6 +138,9 @@ func (s *Server) executeRequest(r *http.Request, backend string, q url.Values) (
 		return "", err
 	}
 	defer resp.Body.Close()
+	if (resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices) && resp.StatusCode != http.StatusConflict {
+		return "", fmt.Errorf("upstream returned status %d", resp.StatusCode)
+	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err

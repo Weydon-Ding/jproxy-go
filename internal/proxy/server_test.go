@@ -131,6 +131,61 @@ func TestRouteReturnsBadGatewayOnUpstreamFailure(t *testing.T) {
 	}
 }
 
+func TestRouteReturnsBadGatewayAndDoesNotCacheUpstreamStatusError(t *testing.T) {
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(rssWithItems(item("bad"))))
+			return
+		}
+		_, _ = w.Write([]byte(rssWithItems(item("ok"))))
+	}))
+	defer upstream.Close()
+
+	srv := NewServer(testConfig(upstream.URL, upstream.URL))
+	handler := srv.Routes()
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/sonarr/jackett/api?t=search&apikey=one", nil))
+	if first.Code != http.StatusBadGateway {
+		t.Fatalf("first status = %d, want 502; body=%q", first.Code, first.Body.String())
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/sonarr/jackett/api?t=search&apikey=two", nil))
+	if second.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want 200; body=%q", second.Code, second.Body.String())
+	}
+	if calls != 2 {
+		t.Fatalf("upstream calls = %d, want 2", calls)
+	}
+	if !strings.Contains(second.Body.String(), "<title>ok</title>") || strings.Contains(second.Body.String(), "<title>bad</title>") {
+		t.Fatalf("second response should come from successful upstream, got %q", second.Body.String())
+	}
+}
+
+func TestRouteAllowsUpstreamConflictResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(rssWithItems(item("conflict"))))
+	}))
+	defer upstream.Close()
+
+	srv := NewServer(testConfig(upstream.URL, upstream.URL))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sonarr/jackett/api?t=search", nil)
+
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "<title>conflict</title>") {
+		t.Fatalf("response = %q, want readable 409 body", rec.Body.String())
+	}
+}
+
 func TestResultCacheIgnoresAPIKey(t *testing.T) {
 	calls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
