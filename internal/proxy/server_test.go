@@ -36,8 +36,10 @@ func TestRoutesForwardAllIndexerPrefixesAndQueryParams(t *testing.T) {
 	}{
 		{name: "sonarr jackett", path: "/sonarr/jackett/api/v2.0/indexers/all/results/torznab", wantBackend: "jackett"},
 		{name: "sonarr prowlarr", path: "/sonarr/prowlarr/api/v1/search", wantBackend: "prowlarr"},
+		{name: "sonarr prowlarr indexer api", path: "/sonarr/prowlarr/1/api", wantBackend: "prowlarr"},
 		{name: "radarr jackett", path: "/radarr/jackett/api/v2.0/indexers/all/results/torznab", wantBackend: "jackett"},
 		{name: "radarr prowlarr", path: "/radarr/prowlarr/api/v1/search", wantBackend: "prowlarr"},
+		{name: "radarr prowlarr indexer api", path: "/radarr/prowlarr/1/api", wantBackend: "prowlarr"},
 	}
 
 	for _, tt := range tests {
@@ -75,6 +77,46 @@ func TestRoutesForwardAllIndexerPrefixesAndQueryParams(t *testing.T) {
 				t.Fatalf("response body %q does not contain backend marker %q", rec.Body.String(), tt.wantBackend)
 			}
 		})
+	}
+}
+
+func TestProwlarrIndexerPathTrimsXMLToLimit(t *testing.T) {
+	var gotPath string
+	var gotQuery url.Values
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query()
+		_, _ = w.Write([]byte(rssWithItems(item("one"), item("two"), item("three"), item("four"))))
+	}))
+	defer upstream.Close()
+
+	srv := NewServer(testConfig("http://jackett.invalid", upstream.URL))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sonarr/prowlarr/1/api?apikey=secret&t=search&q=test&cat=5000&limit=2&offset=0", nil)
+
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%q", rec.Code, rec.Body.String())
+	}
+	if gotPath != "/1/api" {
+		t.Fatalf("upstream path = %q, want /1/api", gotPath)
+	}
+	if gotQuery.Get("apikey") != "secret" || gotQuery.Get("t") != "search" || gotQuery.Get("cat") != "5000" || gotQuery.Get("q") != "test" {
+		t.Fatalf("upstream query = %v", gotQuery)
+	}
+	if countItems(rec.Body.String()) != 2 {
+		t.Fatalf("item count = %d, want 2; xml=%s", countItems(rec.Body.String()), rec.Body.String())
+	}
+	for _, title := range []string{"one", "two"} {
+		if !strings.Contains(rec.Body.String(), "<title>"+title+"</title>") {
+			t.Fatalf("response missing title %q: %s", title, rec.Body.String())
+		}
+	}
+	if strings.Contains(rec.Body.String(), "<title>three</title>") || strings.Contains(rec.Body.String(), "<title>four</title>") {
+		t.Fatalf("response was not trimmed to limit: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "</channel></rss>") {
+		t.Fatalf("response lost feed closing tags: %s", rec.Body.String())
 	}
 }
 
