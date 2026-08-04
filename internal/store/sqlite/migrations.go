@@ -25,8 +25,10 @@ type migration struct {
 }
 
 type lifecycleOptions struct {
-	migrations []migration
-	backup     backupFunc
+	migrations      []migration
+	backup          backupFunc
+	beforeMigration func(context.Context)
+	closeLock       func(*writerLock) error
 }
 
 var embeddedMigrations = []migration{
@@ -69,7 +71,7 @@ func validateLedger(ctx context.Context, db *sql.DB) (bool, error) {
 	return len(seen) == len(known), nil
 }
 
-func applyMigrations(ctx context.Context, db *sql.DB, migrations []migration) (err error) {
+func applyMigrationsAfterHook(ctx context.Context, db *sql.DB, migrations []migration, beforeCommit func(context.Context)) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin SQLite migration transaction: %w", err)
@@ -119,6 +121,9 @@ func applyMigrations(ctx context.Context, db *sql.DB, migrations []migration) (e
 		case storedChecksum != migration.checksum:
 			return fmt.Errorf("migration %s: stored %s, expected %s: %w", migration.version, storedChecksum, migration.checksum, ErrIncompatibleSchema)
 		}
+	}
+	if beforeCommit != nil {
+		beforeCommit(ctx)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit SQLite migrations: %w", err)

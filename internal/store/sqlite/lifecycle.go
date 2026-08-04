@@ -35,6 +35,9 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 	if options.backup == nil {
 		options.backup = createVerifiedBackup
 	}
+	if options.closeLock == nil {
+		options.closeLock = func(lock *writerLock) error { return lock.Close() }
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("open writable SQLite lifecycle: %w", err)
 	}
@@ -52,7 +55,7 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, lock.Close())
+			err = errors.Join(err, options.closeLock(lock))
 		}
 	}()
 	db, err := openWritable(ctx, absolutePath)
@@ -80,7 +83,7 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 	if err := configureJournal(ctx, db); err != nil {
 		return nil, err
 	}
-	if err := applyMigrations(ctx, db, options.migrations); err != nil {
+	if err := applyMigrationsAfterHook(ctx, db, options.migrations, options.beforeMigration); err != nil {
 		return nil, err
 	}
 	return store, nil
