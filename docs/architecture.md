@@ -4,7 +4,8 @@
 
 - `cmd/jproxy`: process entrypoint only.
 - `internal/config`: configuration loading and validation.
-- `internal/store/sqlite`: read-only startup snapshot loader for formatter data.
+- `internal/store/sqlite`: writable SQLite lifecycle, repositories, and startup snapshot loader.
+- `internal/app`: composition root for store, HTTP server, structured logging, and shutdown.
 - `internal/cache`: reusable in-memory TTL cache.
 - `internal/proxy`: indexer proxy orchestration and HTTP handlers.
 - `configs`: sample runtime configuration.
@@ -24,10 +25,11 @@ Implemented:
 - Disabled-by-default static Radarr and Sonarr XML title formatters. Each has
   independent environment JSON configuration and runs after search processing,
   before result-cache insertion.
-- Optional SQLite formatter snapshot mode. At startup, configuration loads both
-  formatter payloads in one read-only transaction, validates them, and closes
-  the database before the HTTP server starts. Requests never read, write, poll,
-  watch, or reload the file.
+- Optional SQLite formatter snapshot mode. The application opens and migrates a
+  writable store before the HTTP listener exists, then loads both formatter
+  payloads in one read-only transaction from that store. The store remains open
+  while serving and closes after HTTP shutdown. Requests never poll, watch, or
+  reload the file.
 
 ## Formatter payload selection
 
@@ -43,3 +45,7 @@ Next:
 1. Port title/rule sync services.
 2. Extend the opt-in static title formatters toward full rule formatting.
 3. Add API/UI compatibility layer.
+
+Java JProxy and jproxy-go must not concurrently write a database. With database
+mode disabled, formatter environment variables retain their existing behavior.
+Runtime reload is deferred to Todo 5.

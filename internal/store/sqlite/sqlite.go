@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -48,6 +49,24 @@ func Load(ctx context.Context, path string) (Snapshot, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return Snapshot{}, fmt.Errorf("commit read-only SQLite transaction: %w", err)
+	}
+	return snapshot, nil
+}
+
+// FormatterSnapshot reads and validates formatter data through this already-open
+// writable store. It is intentionally a startup-only snapshot, not a live provider.
+func (s *Store) FormatterSnapshot(ctx context.Context) (Snapshot, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("begin formatter snapshot transaction: %w", err)
+	}
+	snapshot, err := loadSnapshot(ctx, tx)
+	if err != nil {
+		rollbackErr := tx.Rollback()
+		return Snapshot{}, errors.Join(err, rollbackErr)
+	}
+	if err := tx.Commit(); err != nil {
+		return Snapshot{}, fmt.Errorf("commit formatter snapshot transaction: %w", err)
 	}
 	return snapshot, nil
 }

@@ -21,7 +21,7 @@ Included:
 Not included in v0.1.0:
 
 - Web admin UI, login/JWT
-- SQLite writes, migrations, UI management, or runtime synchronization
+- SQLite UI management or runtime synchronization
 - Full title library, aliases, or remote rule synchronization
 - Downloader integration
 
@@ -141,7 +141,7 @@ See `configs/jproxy.env.example`.
 | `CACHE_EXPIRES` | `4320` | Offset cache TTL in minutes. |
 | `OFFSET_CACHE_MAX_ENTRIES` | `1000` | Maximum number of cached offset entries. |
 | `HTTP_TIMEOUT_SECONDS` | `60` | Upstream HTTP timeout in seconds. |
-| `JPROXY_DB_ENABLED` | `false` | Load both formatter payloads from a read-only SQLite snapshot at startup. |
+| `JPROXY_DB_ENABLED` | `false` | Open a writable long-lived SQLite store and load formatter payloads at startup. |
 | `JPROXY_DB_PATH` | none | Required when DB mode is enabled; ignored while DB mode is disabled. |
 | `JPROXY_RADARR_FORMAT_ENABLED` | `false` | Enable the Phase 1 Radarr-only XML title formatter. |
 | `JPROXY_RADARR_FORMAT` | none | Required template when formatting is enabled; it must contain `{title}`. |
@@ -156,11 +156,12 @@ See `configs/jproxy.env.example`.
 
 ## SQLite Formatter Snapshot
 
-Set `JPROXY_DB_ENABLED=true` and `JPROXY_DB_PATH` to an existing SQLite file to
-load formatter payloads once during startup. jproxy-go uses the pure-Go
-`modernc.org/sqlite` driver with a read-only URI, query-only mode, one
-connection, and one read-only transaction. The database closes before serving
-requests; it is never created, migrated, written, polled, watched, or reloaded.
+Set `JPROXY_DB_ENABLED=true` and `JPROXY_DB_PATH` to a writable SQLite file.
+jproxy-go opens one long-lived writable store, validates and applies migrations
+before it creates the listener, then loads formatter payloads in one read-only
+transaction from that same store. The store remains open until HTTP shutdown
+completes. Stop Java JProxy before starting database mode: Java and Go must not
+write the same database concurrently.
 
 The snapshot requires exactly one active non-NULL `system_config` value each for
 `radarrIndexerFormat`, `sonarrIndexerFormat`, and `cleanTitleRegex`. It loads
@@ -172,7 +173,8 @@ titles, and clean-regex environment variables are ignored, so no formatter
 mixes database and environment data. `JPROXY_RADARR_FORMAT_ENABLED` and
 `JPROXY_SONARR_FORMAT_ENABLED` remain independent execution switches. The
 database is still opened and validated when both switches are false. With
-database mode disabled, existing environment JSON behavior is unchanged.
+database mode disabled, existing environment JSON behavior is unchanged. The
+snapshot is startup-only; runtime reload remains Todo 5.
 
 ## Radarr Title Formatting
 
@@ -247,5 +249,5 @@ go build ./cmd/jproxy
 
 This README documents the v0.1.0 MVP plus opt-in Radarr and Sonarr formatters.
 The original Java JProxy UI, login, title synchronization, remote rule features,
-and all database writes remain out of scope. SQLite support is limited to the
-read-only formatter snapshot described above.
+and runtime database reload remain out of scope. SQLite writes here are limited
+to the owned migration lifecycle described above.

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,10 +9,7 @@ import (
 	"time"
 
 	"jproxy-go/internal/format"
-	"jproxy-go/internal/store/sqlite"
 )
-
-const dbLoadTimeout = 5 * time.Second
 
 type Config struct {
 	Addr                  string
@@ -25,8 +21,16 @@ type Config struct {
 	OffsetCacheTTL        time.Duration
 	OffsetCacheMaxEntries int
 	HTTPTimeout           time.Duration
+	Database              DatabaseConfig
 	RadarrFormatting      RadarrFormattingConfig
 	SonarrFormatting      SonarrFormattingConfig
+}
+
+// DatabaseConfig selects the long-lived writable SQLite application store.
+// Loading configuration intentionally does not open the database.
+type DatabaseConfig struct {
+	Enabled bool
+	Path    string
 }
 
 type RadarrFormattingConfig struct {
@@ -68,14 +72,9 @@ func LoadConfig() (Config, error) {
 		if path == "" {
 			return Config{}, fmt.Errorf("JPROXY_DB_PATH is required when JPROXY_DB_ENABLED is true")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), dbLoadTimeout)
-		defer cancel()
-		snapshot, loadErr := sqlite.Load(ctx, path)
-		if loadErr != nil {
-			return Config{}, fmt.Errorf("load SQLite formatter snapshot: %w", loadErr)
-		}
-		cfg.RadarrFormatting = RadarrFormattingConfig{Enabled: radarrFormatEnabled, Config: snapshot.Radarr}
-		cfg.SonarrFormatting = SonarrFormattingConfig{Enabled: sonarrFormatEnabled, Config: snapshot.Sonarr}
+		cfg.Database = DatabaseConfig{Enabled: true, Path: path}
+		cfg.RadarrFormatting.Enabled = radarrFormatEnabled
+		cfg.SonarrFormatting.Enabled = sonarrFormatEnabled
 		return cfg, nil
 	}
 	if radarrFormatEnabled {

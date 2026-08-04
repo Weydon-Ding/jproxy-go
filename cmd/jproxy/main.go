@@ -1,22 +1,33 @@
 package main
 
 import (
-	"log"
-	"net/http"
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"jproxy-go/internal/app"
 	"jproxy-go/internal/config"
-	"jproxy-go/internal/proxy"
 )
 
 func main() {
+	logger := app.ConfiguredLogger(os.Stdout)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	os.Exit(run(ctx, logger))
+}
+
+func run(ctx context.Context, logger *slog.Logger) int {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("application.failed", "stage", "configuration", "error_kind", "invalid_configuration")
+		return 1
 	}
-	srv := proxy.NewServer(cfg)
-	log.Printf("jproxy-go listening on %s", cfg.Addr)
-	log.Printf("jackett=%s prowlarr=%s", cfg.JackettURL, cfg.ProwlarrURL)
-	if err := http.ListenAndServe(cfg.Addr, srv.Routes()); err != nil {
-		log.Fatal(err)
+	if err := app.Run(ctx, cfg, logger); err != nil {
+		logger.Error("application.failed", "stage", "runtime", "error_kind", "runtime_failure")
+		return 1
 	}
+	logger.Info("application.stopped")
+	return 0
 }

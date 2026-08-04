@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/format"
+	store "jproxy-go/internal/store/sqlite"
 
 	_ "modernc.org/sqlite"
 )
@@ -158,12 +160,10 @@ func TestSonarrFormattingRunsBeforeCacheAndDoesNotAffectRadarr(t *testing.T) {
 func TestDatabaseFormatterSnapshot_formatsRadarrAndSonarrThroughHTTPHandlers(t *testing.T) {
 	// Given
 	path := createProxyFormatterDatabase(t)
-	t.Setenv("JPROXY_DB_ENABLED", "true")
-	t.Setenv("JPROXY_DB_PATH", path)
-	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
-	t.Setenv("JPROXY_SONARR_FORMAT_ENABLED", "true")
-	t.Setenv("JPROXY_RADARR_FORMAT", "invalid env payload")
-	t.Setenv("JPROXY_SONARR_FORMAT", "invalid env payload")
+	snapshot, err := store.Load(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
 	radarrUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(rssWithItems(item("Movie.2024.1080p"))))
 	}))
@@ -174,9 +174,11 @@ func TestDatabaseFormatterSnapshot_formatsRadarrAndSonarrThroughHTTPHandlers(t *
 	defer sonarrUpstream.Close()
 	t.Setenv("JACKETT_URL", radarrUpstream.URL)
 	t.Setenv("PROWLARR_URL", sonarrUpstream.URL)
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+	cfg := config.Config{
+		JackettURL:       radarrUpstream.URL,
+		ProwlarrURL:      sonarrUpstream.URL,
+		RadarrFormatting: config.RadarrFormattingConfig{Enabled: true, Config: snapshot.Radarr},
+		SonarrFormatting: config.SonarrFormattingConfig{Enabled: true, Config: snapshot.Sonarr},
 	}
 	handler := NewServer(cfg).Routes()
 
