@@ -118,3 +118,35 @@ func TestRadarrFormatting_skipsDisabledRules(t *testing.T) {
 		t.Fatalf("response = status %d body %q, want unchanged %q", rec.Code, rec.Body.String(), xml)
 	}
 }
+
+func TestSonarrFormattingRunsBeforeCacheAndDoesNotAffectRadarr(t *testing.T) {
+	// Given
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(rssWithItems(item("Show.S02E03.1080p"))))
+	}))
+	defer upstream.Close()
+	cfg := testConfig(upstream.URL, upstream.URL)
+	cfg.SonarrFormatting = config.SonarrFormattingConfig{
+		Enabled: true,
+		Config: format.SonarrConfig{
+			Format: "{title} {season}",
+			Rules:  []format.Rule{{Token: "title", Regex: `^(.+?)\.S\d+E\d+.*$`, Replacement: "$1"}},
+		},
+	}
+	handler := NewServer(cfg).Routes()
+
+	// When
+	firstSonarr := httptest.NewRecorder()
+	handler.ServeHTTP(firstSonarr, httptest.NewRequest(http.MethodGet, "/sonarr/jackett/api?t=search&apikey=one", nil))
+	secondSonarr := httptest.NewRecorder()
+	handler.ServeHTTP(secondSonarr, httptest.NewRequest(http.MethodGet, "/sonarr/jackett/api?t=search&apikey=two", nil))
+	radarr := httptest.NewRecorder()
+	handler.ServeHTTP(radarr, httptest.NewRequest(http.MethodGet, "/radarr/jackett/api?t=search", nil))
+
+	// Then
+	if calls != 2 || !strings.Contains(firstSonarr.Body.String(), "<title>Show</title>") || firstSonarr.Body.String() != secondSonarr.Body.String() || !strings.Contains(radarr.Body.String(), "<title>Show.S02E03.1080p</title>") {
+		t.Fatalf("calls=%d sonarr first=%q second=%q radarr=%q", calls, firstSonarr.Body.String(), secondSonarr.Body.String(), radarr.Body.String())
+	}
+}

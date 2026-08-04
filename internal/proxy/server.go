@@ -67,6 +67,9 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 		if kind == "radarr" && s.cfg.RadarrFormatting.Enabled {
 			xml = format.RadarrXML(xml, s.cfg.RadarrFormatting.Config)
 		}
+		if kind == "sonarr" && s.cfg.SonarrFormatting.Enabled {
+			xml = format.SonarrXML(xml, s.cfg.SonarrFormatting.Config)
+		}
 		if xml != "" && hasChannel(xml) {
 			s.resultCache.Set(cacheKey, xml)
 		}
