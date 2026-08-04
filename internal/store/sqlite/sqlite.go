@@ -55,17 +55,30 @@ func Load(ctx context.Context, path string) (Snapshot, error) {
 
 // FormatterSnapshot reads and validates formatter data through this already-open
 // writable store. It is intentionally a startup-only snapshot, not a live provider.
-func (s *Store) FormatterSnapshot(ctx context.Context) (Snapshot, error) {
+func (s *Store) FormatterSnapshot(ctx context.Context) (snapshot Snapshot, err error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("begin formatter snapshot transaction: %w", err)
 	}
-	snapshot, err := loadSnapshot(ctx, tx)
+	return snapshotFromTransaction(tx, func() (Snapshot, error) { return loadSnapshot(ctx, tx) })
+}
+
+type snapshotTransaction interface {
+	Commit() error
+	Rollback() error
+}
+
+func snapshotFromTransaction(tx snapshotTransaction, load func() (Snapshot, error)) (snapshot Snapshot, err error) {
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("rollback formatter snapshot transaction: %w", rollbackErr))
+		}
+	}()
+	snapshot, err = load()
 	if err != nil {
-		rollbackErr := tx.Rollback()
-		return Snapshot{}, errors.Join(err, rollbackErr)
+		return Snapshot{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return Snapshot{}, fmt.Errorf("commit formatter snapshot transaction: %w", err)
 	}
 	return snapshot, nil
