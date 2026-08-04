@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,7 +10,10 @@ import (
 	"time"
 
 	"jproxy-go/internal/format"
+	"jproxy-go/internal/store/sqlite"
 )
+
+const dbLoadTimeout = 5 * time.Second
 
 type Config struct {
 	Addr                  string
@@ -51,16 +55,35 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	sonarrFormatEnabled, err := envBool("JPROXY_SONARR_FORMAT_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
+	dbEnabled, err := envBool("JPROXY_DB_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
+	if dbEnabled {
+		path := strings.TrimSpace(os.Getenv("JPROXY_DB_PATH"))
+		if path == "" {
+			return Config{}, fmt.Errorf("JPROXY_DB_PATH is required when JPROXY_DB_ENABLED is true")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), dbLoadTimeout)
+		defer cancel()
+		snapshot, loadErr := sqlite.Load(ctx, path)
+		if loadErr != nil {
+			return Config{}, fmt.Errorf("load SQLite formatter snapshot: %w", loadErr)
+		}
+		cfg.RadarrFormatting = RadarrFormattingConfig{Enabled: radarrFormatEnabled, Config: snapshot.Radarr}
+		cfg.SonarrFormatting = SonarrFormattingConfig{Enabled: sonarrFormatEnabled, Config: snapshot.Sonarr}
+		return cfg, nil
+	}
 	if radarrFormatEnabled {
 		formatConfig, loadErr := loadRadarrFormatConfig()
 		if loadErr != nil {
 			return Config{}, loadErr
 		}
 		cfg.RadarrFormatting = RadarrFormattingConfig{Enabled: true, Config: formatConfig}
-	}
-	sonarrFormatEnabled, err := envBool("JPROXY_SONARR_FORMAT_ENABLED", false)
-	if err != nil {
-		return Config{}, err
 	}
 	if sonarrFormatEnabled {
 		formatConfig, loadErr := loadSonarrFormatConfig()

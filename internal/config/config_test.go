@@ -1,8 +1,12 @@
 package config
 
 import (
+	"database/sql"
+	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestLoadConfigDefaults(t *testing.T) {
@@ -229,4 +233,70 @@ func TestLoadConfigRejectsInvalidEnabledSonarrFormatting(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadConfig() error = nil, want Sonarr title validation error")
 	}
+}
+
+func TestLoadConfig_loadsAllFormatterPayloadFromEnabledDatabase(t *testing.T) {
+	// Given
+	path := createFormatterDatabase(t)
+	t.Setenv("JPROXY_DB_ENABLED", "true")
+	t.Setenv("JPROXY_DB_PATH", path)
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_SONARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "not a valid env formatter")
+	t.Setenv("JPROXY_SONARR_FORMAT", "not a valid env formatter")
+
+	// When
+	cfg, err := LoadConfig()
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if !cfg.RadarrFormatting.Enabled || !cfg.SonarrFormatting.Enabled || cfg.RadarrFormatting.Config.Format != "{title}" || cfg.SonarrFormatting.Config.Format != "{title}" {
+		t.Fatalf("LoadConfig() = %#v", cfg)
+	}
+}
+
+func TestLoadConfig_rejectsEnabledDatabaseWithoutPath(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_DB_ENABLED", "true")
+	t.Setenv("JPROXY_DB_PATH", "")
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want required database path error")
+	}
+}
+
+func createFormatterDatabase(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "formatters.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close test database: %v", closeErr)
+		}
+	})
+	statements := []string{
+		`CREATE TABLE system_config (key TEXT, value TEXT, valid_status INTEGER)`,
+		`CREATE TABLE radarr_rule (token TEXT, priority INTEGER, regex TEXT, replacement TEXT, offset INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE sonarr_rule (token TEXT, priority INTEGER, regex TEXT, replacement TEXT, offset INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE radarr_title (main_title TEXT, title TEXT, clean_title TEXT, year INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE sonarr_title (main_title TEXT, title TEXT, clean_title TEXT, season_number INTEGER, valid_status INTEGER)`,
+		`INSERT INTO system_config VALUES ('radarrIndexerFormat', '{title}', 1), ('sonarrIndexerFormat', '{title}', 1), ('cleanTitleRegex', '', 1)`,
+		`INSERT INTO radarr_rule VALUES ('title', 1000, '^(.+)$', '$1', 0, 1)`,
+		`INSERT INTO sonarr_rule VALUES ('title', 1000, '^(.+)$', '$1', 0, 1)`,
+	}
+	for _, statement := range statements {
+		if _, execErr := db.Exec(statement); execErr != nil {
+			t.Fatalf("execute test schema: %v", execErr)
+		}
+	}
+	return path
 }
