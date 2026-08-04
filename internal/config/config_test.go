@@ -198,3 +198,35 @@ func TestLoadConfigRejectsInvalidEnabledRadarrRuleValidStatus(t *testing.T) {
 		t.Fatal("LoadConfig() error = nil, want invalid validStatus error")
 	}
 }
+
+func TestLoadConfigLoadsEnabledSonarrFormattingIndependently(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_SONARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_SONARR_FORMAT", "{title} {season}")
+	t.Setenv("JPROXY_SONARR_TITLE_CLEAN_REGEX", `\bseason\b`)
+	t.Setenv("JPROXY_SONARR_FORMAT_RULES", `[{"token":"title","regex":"^(.+)$","replacement":"$1"}]`)
+	t.Setenv("JPROXY_SONARR_TITLES", `[{"mainTitle":"Show","title":"Show","seasonNumber":2}]`)
+
+	// When
+	cfg, err := LoadConfig()
+
+	// Then
+	if err != nil || !cfg.SonarrFormatting.Enabled || cfg.SonarrFormatting.Config.Format != "{title} {season}" || len(cfg.SonarrFormatting.Config.Titles) != 1 || cfg.RadarrFormatting.Enabled {
+		t.Fatalf("LoadConfig() = %#v, %v", cfg, err)
+	}
+}
+
+func TestLoadConfigRejectsInvalidEnabledSonarrFormatting(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_SONARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_SONARR_FORMAT", "{title}")
+	t.Setenv("JPROXY_SONARR_TITLES", `[{"mainTitle":"Show","title":"Show"}]`)
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want Sonarr title validation error")
+	}
+}

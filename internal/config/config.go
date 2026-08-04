@@ -22,11 +22,17 @@ type Config struct {
 	OffsetCacheMaxEntries int
 	HTTPTimeout           time.Duration
 	RadarrFormatting      RadarrFormattingConfig
+	SonarrFormatting      SonarrFormattingConfig
 }
 
 type RadarrFormattingConfig struct {
 	Enabled bool
 	Config  format.Config
+}
+
+type SonarrFormattingConfig struct {
+	Enabled bool
+	Config  format.SonarrConfig
 }
 
 func LoadConfig() (Config, error) {
@@ -41,18 +47,28 @@ func LoadConfig() (Config, error) {
 		OffsetCacheMaxEntries: envInt("OFFSET_CACHE_MAX_ENTRIES", 1000),
 		HTTPTimeout:           time.Duration(envInt("HTTP_TIMEOUT_SECONDS", 60)) * time.Second,
 	}
-	formatEnabled, err := envBool("JPROXY_RADARR_FORMAT_ENABLED", false)
+	radarrFormatEnabled, err := envBool("JPROXY_RADARR_FORMAT_ENABLED", false)
 	if err != nil {
 		return Config{}, err
 	}
-	if !formatEnabled {
-		return cfg, nil
+	if radarrFormatEnabled {
+		formatConfig, loadErr := loadRadarrFormatConfig()
+		if loadErr != nil {
+			return Config{}, loadErr
+		}
+		cfg.RadarrFormatting = RadarrFormattingConfig{Enabled: true, Config: formatConfig}
 	}
-	formatConfig, err := loadRadarrFormatConfig()
+	sonarrFormatEnabled, err := envBool("JPROXY_SONARR_FORMAT_ENABLED", false)
 	if err != nil {
 		return Config{}, err
 	}
-	cfg.RadarrFormatting = RadarrFormattingConfig{Enabled: true, Config: formatConfig}
+	if sonarrFormatEnabled {
+		formatConfig, loadErr := loadSonarrFormatConfig()
+		if loadErr != nil {
+			return Config{}, loadErr
+		}
+		cfg.SonarrFormatting = SonarrFormattingConfig{Enabled: true, Config: formatConfig}
+	}
 	return cfg, nil
 }
 
@@ -72,6 +88,26 @@ func loadRadarrFormatConfig() (format.Config, error) {
 	cfg := format.Config{Format: formatText, CleanTitleRegex: os.Getenv("JPROXY_RADARR_TITLE_CLEAN_REGEX"), Rules: rules, Titles: titles}
 	if err := format.ValidateConfig(cfg); err != nil {
 		return format.Config{}, fmt.Errorf("validate Radarr formatting config: %w", err)
+	}
+	return cfg, nil
+}
+
+func loadSonarrFormatConfig() (format.SonarrConfig, error) {
+	formatText := strings.TrimSpace(os.Getenv("JPROXY_SONARR_FORMAT"))
+	if formatText == "" {
+		return format.SonarrConfig{}, fmt.Errorf("JPROXY_SONARR_FORMAT is required when JPROXY_SONARR_FORMAT_ENABLED is true")
+	}
+	var rules []format.Rule
+	if err := json.Unmarshal([]byte(env("JPROXY_SONARR_FORMAT_RULES", "[]")), &rules); err != nil {
+		return format.SonarrConfig{}, fmt.Errorf("parse JPROXY_SONARR_FORMAT_RULES: %w", err)
+	}
+	var titles []format.SonarrTitle
+	if err := json.Unmarshal([]byte(env("JPROXY_SONARR_TITLES", "[]")), &titles); err != nil {
+		return format.SonarrConfig{}, fmt.Errorf("parse JPROXY_SONARR_TITLES: %w", err)
+	}
+	cfg := format.SonarrConfig{Format: formatText, CleanTitleRegex: os.Getenv("JPROXY_SONARR_TITLE_CLEAN_REGEX"), Rules: rules, Titles: titles}
+	if err := format.ValidateSonarrConfig(cfg); err != nil {
+		return format.SonarrConfig{}, fmt.Errorf("validate Sonarr formatting config: %w", err)
 	}
 	return cfg, nil
 }
