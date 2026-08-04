@@ -16,7 +16,10 @@ func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("OFFSET_CACHE_MAX_ENTRIES", "")
 	t.Setenv("HTTP_TIMEOUT_SECONDS", "")
 
-	cfg := LoadConfig()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
 	if cfg.Addr != ":8117" {
 		t.Fatalf("Addr = %q, want :8117", cfg.Addr)
 	}
@@ -57,7 +60,10 @@ func TestLoadConfigEnvironmentOverridesAndTrimsURLs(t *testing.T) {
 	t.Setenv("OFFSET_CACHE_MAX_ENTRIES", "12")
 	t.Setenv("HTTP_TIMEOUT_SECONDS", "4")
 
-	cfg := LoadConfig()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
 	if cfg.Addr != "127.0.0.1:9000" {
 		t.Fatalf("Addr = %q", cfg.Addr)
 	}
@@ -74,7 +80,11 @@ func TestLoadConfigEnvironmentOverridesAndTrimsURLs(t *testing.T) {
 
 func TestEnvIntFallsBackOnInvalidValue(t *testing.T) {
 	t.Setenv("MIN_COUNT", "not-a-number")
-	if got := LoadConfig().MinCount; got != 6 {
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if got := cfg.MinCount; got != 6 {
 		t.Fatalf("MinCount with invalid env = %d, want default 6", got)
 	}
 }
@@ -85,7 +95,10 @@ func TestLoadConfigFallsBackOnInvalidCacheMaxEntries(t *testing.T) {
 	t.Setenv("OFFSET_CACHE_MAX_ENTRIES", "also-not-a-number")
 
 	// When
-	cfg := LoadConfig()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
 
 	// Then
 	if cfg.ResultCacheMaxEntries != 1000 {
@@ -93,5 +106,65 @@ func TestLoadConfigFallsBackOnInvalidCacheMaxEntries(t *testing.T) {
 	}
 	if cfg.OffsetCacheMaxEntries != 1000 {
 		t.Fatalf("OffsetCacheMaxEntries with invalid env = %d, want default 1000", cfg.OffsetCacheMaxEntries)
+	}
+}
+
+func TestLoadConfigLoadsEnabledRadarrFormatting(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "{title} {year}")
+	t.Setenv("JPROXY_RADARR_TITLE_CLEAN_REGEX", `\b2024\b`)
+	t.Setenv("JPROXY_RADARR_FORMAT_RULES", `[{"token":"title","regex":"^(.+)$","replacement":"$1"}]`)
+	t.Setenv("JPROXY_RADARR_TITLES", `[{"mainTitle":"Movie","title":"Movie","year":2024}]`)
+
+	// When
+	cfg, err := LoadConfig()
+
+	// Then
+	if err != nil || !cfg.RadarrFormatting.Enabled || cfg.RadarrFormatting.Config.Format != "{title} {year}" || len(cfg.RadarrFormatting.Config.Titles) != 1 {
+		t.Fatalf("LoadConfig() = %#v, %v", cfg, err)
+	}
+}
+
+func TestLoadConfigRejectsMalformedEnabledRadarrFormatting(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "{title}")
+	t.Setenv("JPROXY_RADARR_FORMAT_RULES", `[{"token":"title","regex":"["}]`)
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid enabled formatting config error")
+	}
+}
+
+func TestLoadConfigRejectsMalformedRadarrFormattingEnabledFlag(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "sometimes")
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid boolean error")
+	}
+}
+
+func TestLoadConfigRejectsInvalidEnabledRadarrCleanTitleRegex(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "{title}")
+	t.Setenv("JPROXY_RADARR_TITLE_CLEAN_REGEX", "[")
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid clean title regex error")
 	}
 }

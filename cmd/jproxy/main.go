@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	cfg := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 	srv := proxy.NewServer(cfg)
 	log.Printf("jproxy-go listening on %s", cfg.Addr)
 	log.Printf("jackett=%s prowlarr=%s", cfg.JackettURL, cfg.ProwlarrURL)
