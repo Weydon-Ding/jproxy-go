@@ -55,7 +55,7 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `SonarrRuleController` | `POST /api/sonarr/rule/enable` | `enable` | Pending migration | Todo 7 |
 | `SonarrRuleController` | `POST /api/sonarr/rule/disable` | `disable` | Pending migration | Todo 7 |
 | `SonarrRuleController` | `POST /api/sonarr/rule/export` | `export` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/import` | `importRules` | Pending migration | Todo 7 |
+| `SonarrRuleController` | `POST /api/sonarr/rule/import` | `importSonarrRule` | Pending migration | Todo 7 |
 | `SonarrRuleController` | `GET /api/sonarr/rule/token/list` | `listToken` | Pending migration | Todo 7 |
 | `RadarrRuleController` | `POST /api/radarr/rule/sync` | `sync` | Pending migration | Todo 7 |
 | `RadarrRuleController` | `GET /api/radarr/rule/query` | `query` | Pending migration | Todo 7 |
@@ -64,7 +64,7 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `RadarrRuleController` | `POST /api/radarr/rule/enable` | `enable` | Pending migration | Todo 7 |
 | `RadarrRuleController` | `POST /api/radarr/rule/disable` | `disable` | Pending migration | Todo 7 |
 | `RadarrRuleController` | `POST /api/radarr/rule/export` | `export` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/import` | `importRules` | Pending migration | Todo 7 |
+| `RadarrRuleController` | `POST /api/radarr/rule/import` | `importRadarrRule` | Pending migration | Todo 7 |
 | `RadarrRuleController` | `GET /api/radarr/rule/token/list` | `listToken` | Pending migration | Todo 7 |
 | `SonarrExampleController` | `POST /api/sonarr/example/save` | `save` | Pending migration | Todo 7 |
 | `SonarrExampleController` | `GET /api/sonarr/example/query` | `query` | Pending migration | Todo 7 |

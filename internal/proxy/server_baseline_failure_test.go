@@ -3,7 +3,8 @@ package proxy
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"net/url"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -84,18 +85,27 @@ func TestProxy_preservesUpstreamBytes_whenSonarrFormatterIsDisabled(t *testing.T
 
 func TestProxy_usesDefaultPagination_whenLimitAndOffsetAreInvalid(t *testing.T) {
 	// Given
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(rssWithItems(item("one"), item("two"))))
+	items := make([]string, 101)
+	for index := range items {
+		items[index] = item(strconv.Itoa(index + 1))
+	}
+	var upstreamQueries []url.Values
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamQueries = append(upstreamQueries, r.URL.Query())
+		_, _ = w.Write([]byte(rssWithItems(items...)))
 	}))
 	defer upstream.Close()
 	handler := NewServer(testConfig(upstream.URL, upstream.URL)).Routes()
 
 	// When
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sonarr/prowlarr/api?t=search&q=Show+007&limit=bad&offset=bad", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/radarr/prowlarr/api?t=search&q=Movie+Title+2024&limit=bad&offset=bad", nil))
 
 	// Then
-	if recorder.Code != http.StatusOK || countItems(recorder.Body.String()) != 2 || !strings.Contains(recorder.Body.String(), "<title>one</title>") {
-		t.Fatalf("status=%d xml=%q", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusOK || countItems(recorder.Body.String()) != 100 {
+		t.Fatalf("status=%d itemCount=%d", recorder.Code, countItems(recorder.Body.String()))
+	}
+	if len(upstreamQueries) != 1 || upstreamQueries[0].Get("q") != "Movie Title 2024" || upstreamQueries[0].Get("offset") != "bad" || upstreamQueries[0].Get("limit") != "bad" {
+		t.Fatalf("upstream queries=%v", upstreamQueries)
 	}
 }
