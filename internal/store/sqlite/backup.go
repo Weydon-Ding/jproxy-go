@@ -11,10 +11,11 @@ import (
 
 func createVerifiedBackup(ctx context.Context, db *sql.DB, databasePath string) (string, error) {
 	backupPath := databasePath + ".bak-" + time.Now().UTC().Format("20060102T150405.000000000Z")
+	return createVerifiedBackupTo(ctx, db, backupPath)
+}
+
+func createVerifiedBackupTo(ctx context.Context, db *sql.DB, backupPath string) (string, error) {
 	quotedPath := strings.ReplaceAll(filepath.ToSlash(backupPath), "'", "''")
-	if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-		return "", fmt.Errorf("checkpoint SQLite before backup: %w", err)
-	}
 	if _, err := db.ExecContext(ctx, "VACUUM INTO '"+quotedPath+"'"); err != nil {
 		return "", fmt.Errorf("create SQLite backup: %w", err)
 	}
@@ -30,8 +31,12 @@ func createVerifiedBackup(ctx context.Context, db *sql.DB, databasePath string) 
 	if integrity != "ok" {
 		return "", fmt.Errorf("check SQLite backup integrity: got %q", integrity)
 	}
-	if schema, err := inspectSchema(ctx, backup); err != nil || schema != schemaJava {
-		return "", fmt.Errorf("verify SQLite backup schema: schema=%d: %w", schema, err)
+	backupTables, err := tableSet(ctx, backup)
+	if err != nil {
+		return "", err
+	}
+	if err := validateJavaSchema(ctx, backup, backupTables); err != nil {
+		return "", fmt.Errorf("verify SQLite backup schema: %w", err)
 	}
 	if err := verifyTableCounts(ctx, db, backup); err != nil {
 		return "", err

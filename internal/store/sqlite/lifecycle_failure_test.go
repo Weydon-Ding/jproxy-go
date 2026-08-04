@@ -47,13 +47,43 @@ func TestOpen_rejectsIncompatibleOrCorruptDatabase(t *testing.T) {
 
 func TestOpen_preservesDatabase_whenMigrationFails(t *testing.T) {
 	path := javaFixture(t)
-	before := tableCounts(t, path)
+	before := logicalDigest(t, path)
 	failing := []migration{newMigration("0001_fails", `CREATE TABLE failure_probe (id INTEGER); INSERT INTO missing_table VALUES (1);`)}
 	if _, err := open(context.Background(), path, lifecycleOptions{migrations: failing}); err == nil {
 		t.Fatal("open() error = nil, want forced migration failure")
 	}
-	if got := tableCounts(t, path); !sameCounts(got, before) {
-		t.Fatalf("post-failure table counts = %#v, want %#v", got, before)
+	if got := logicalDigest(t, path); got != before {
+		t.Fatalf("post-failure digest = %s, want %s", got, before)
+	}
+	backups, err := filepath.Glob(path + ".bak-*")
+	if err != nil {
+		t.Fatalf("glob failure backup: %v", err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("failure backup count = %d, want 1", len(backups))
+	}
+	if got := logicalDigest(t, backups[0]); got != before {
+		t.Fatalf("failure backup digest = %s, want %s", got, before)
+	}
+	restored := filepath.Join(t.TempDir(), "restored.db")
+	backupBytes, err := os.ReadFile(backups[0])
+	if err != nil {
+		t.Fatalf("read failure backup: %v", err)
+	}
+	if err := os.WriteFile(restored, backupBytes, 0o600); err != nil {
+		t.Fatalf("restore failure backup: %v", err)
+	}
+	if got := logicalDigest(t, restored); got != before {
+		t.Fatalf("restored digest = %s, want %s", got, before)
+	}
+	db := openTestDB(t, path)
+	defer closeTestDB(t, db)
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name = 'failure_probe'`).Scan(&count); err != nil {
+		t.Fatalf("query failure probe: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("failure probe count = %d, want 0", count)
 	}
 }
 

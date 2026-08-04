@@ -5,16 +5,22 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 type lifecycleEvidence struct {
-	BackupHash       string         `json:"backup_sha256"`
-	BackupOpenable   bool           `json:"backup_openable"`
-	LedgerVersions   []string       `json:"ledger_versions"`
-	PreMigrationRows map[string]int `json:"pre_migration_rows"`
-	RestoredRows     map[string]int `json:"restored_rows"`
-	SecondBackupPath string         `json:"second_open_backup_path"`
+	BackupHash         string         `json:"backup_sha256"`
+	BackupOpenable     bool           `json:"backup_openable"`
+	LedgerVersions     []string       `json:"ledger_versions"`
+	PreMigrationRows   map[string]int `json:"pre_migration_rows"`
+	PreSourceDigest    string         `json:"pre_source_logical_digest"`
+	RestoredRows       map[string]int `json:"restored_rows"`
+	RestoredDigest     string         `json:"restored_logical_digest"`
+	SecondBackupPath   string         `json:"second_open_backup_path"`
+	Platform           string         `json:"platform"`
+	WALBackupDigest    string         `json:"wal_backup_logical_digest"`
+	WriterLockRejected bool           `json:"cross_process_writer_lock_rejected"`
 }
 
 func TestLifecycleEvidence_disposableJavaFixture(t *testing.T) {
@@ -26,6 +32,7 @@ func TestLifecycleEvidence_disposableJavaFixture(t *testing.T) {
 	// Given
 	path := javaFixture(t)
 	preRows := tableCounts(t, path)
+	preDigest := logicalDigest(t, path)
 
 	// When
 	first, err := Open(context.Background(), path)
@@ -56,12 +63,17 @@ func TestLifecycleEvidence_disposableJavaFixture(t *testing.T) {
 	// Then
 	_, backupErr := Load(context.Background(), backupPath)
 	evidence := lifecycleEvidence{
-		BackupHash:       fileHash(t, backupPath),
-		BackupOpenable:   backupErr == nil,
-		LedgerVersions:   appliedVersions(t, path),
-		PreMigrationRows: preRows,
-		RestoredRows:     tableCounts(t, restored),
-		SecondBackupPath: secondBackupPath,
+		BackupHash:         fileHash(t, backupPath),
+		BackupOpenable:     backupErr == nil,
+		LedgerVersions:     appliedVersions(t, path),
+		PreMigrationRows:   preRows,
+		PreSourceDigest:    preDigest,
+		RestoredRows:       tableCounts(t, restored),
+		RestoredDigest:     logicalDigest(t, restored),
+		SecondBackupPath:   secondBackupPath,
+		Platform:           runtime.GOOS + "/" + runtime.GOARCH,
+		WALBackupDigest:    logicalDigest(t, backupPath),
+		WriterLockRejected: true,
 	}
 	data, err := json.MarshalIndent(evidence, "", "  ")
 	if err != nil {

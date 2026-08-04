@@ -15,6 +15,9 @@ const migrationLedgerTable = "jproxy_go_migration"
 //go:embed migrations/0001_lifecycle.sql
 var initialMigrationSQL string
 
+//go:embed migrations/0002_examples.sql
+var exampleMigrationSQL string
+
 type migration struct {
 	version  string
 	checksum string
@@ -26,17 +29,44 @@ type lifecycleOptions struct {
 	backup     backupFunc
 }
 
-var embeddedMigrations = []migration{newMigration("0001_lifecycle", initialMigrationSQL)}
+var embeddedMigrations = []migration{
+	newMigration("0001_lifecycle", initialMigrationSQL),
+	newMigration("0002_examples", exampleMigrationSQL),
+}
 
 func newMigration(version, statement string) migration {
 	digest := sha256.Sum256([]byte(statement))
 	return migration{version: version, checksum: hex.EncodeToString(digest[:]), sql: statement}
 }
 
-func hasMigrationLedger(ctx context.Context, db *sql.DB) bool {
-	var count int
-	err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?`, migrationLedgerTable).Scan(&count)
-	return err == nil && count == 1
+func validateLedger(ctx context.Context, db *sql.DB) (bool, error) {
+	if err := requireColumns(ctx, db, migrationLedgerTable, []string{"version", "checksum", "applied_at"}); err != nil {
+		return false, fmt.Errorf("validate Go migration ledger schema: %w", err)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT version, checksum FROM jproxy_go_migration ORDER BY version`)
+	if err != nil {
+		return false, fmt.Errorf("read Go migration ledger: %w", err)
+	}
+	defer rows.Close()
+	known := map[string]string{}
+	for _, migration := range embeddedMigrations {
+		known[migration.version] = migration.checksum
+	}
+	seen := map[string]bool{}
+	for rows.Next() {
+		var version, checksum string
+		if err := rows.Scan(&version, &checksum); err != nil {
+			return false, fmt.Errorf("scan Go migration ledger: %w", err)
+		}
+		if expected, ok := known[version]; !ok || expected != checksum || seen[version] {
+			return false, fmt.Errorf("migration %s ledger entry: %w", version, ErrIncompatibleSchema)
+		}
+		seen[version] = true
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("read Go migration ledger rows: %w", err)
+	}
+	return len(seen) == len(known), nil
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB, migrations []migration) (err error) {
@@ -81,7 +111,7 @@ func applyMigrations(ctx context.Context, db *sql.DB, migrations []migration) (e
 			if _, err := tx.ExecContext(ctx, migration.sql); err != nil {
 				return fmt.Errorf("apply SQLite migration %s: %w", migration.version, err)
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO jproxy_go_migration (version, checksum) VALUES (?, ?)`, migration.version, migration.checksum); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO jproxy_go_migration (version, checksum, applied_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, migration.version, migration.checksum); err != nil {
 				return fmt.Errorf("record SQLite migration %s: %w", migration.version, err)
 			}
 		case err != nil:

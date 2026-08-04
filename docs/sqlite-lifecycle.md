@@ -10,7 +10,8 @@ the writable store.
   required columns and indexes. Unknown schema or ledger checksum drift fails
   closed before a migration is applied.
 - Before the first Go migration of a compatible Java database, SQLite performs
-  a WAL checkpoint and `VACUUM INTO <db>.bak-<UTC timestamp>`. The backup must
+  `VACUUM INTO <db>.bak-<UTC timestamp>` without checkpointing or otherwise
+  mutating the source first. The backup must
   open, pass `integrity_check`, match required table row counts, and match the
   Java schema contract before Go writes the source database.
 - The writer uses `foreign_keys=1`, a 5-second busy timeout, one connection,
@@ -19,7 +20,8 @@ the writable store.
 - `<db>.jproxy-writer.lock` is an OS advisory lock held until `Store.Close`.
   It rejects another cooperating Go writer and is released on process exit. The
   Java application does not participate in this lock, so operational cutover
-  must stop Java before Go obtains the writable lifecycle.
+  must stop Java before Go obtains the writable lifecycle. Only local supported
+  filesystems are covered; SMB, NFS, and other network filesystems are unsupported.
 
 Backups, lock files, and real databases are runtime data and must not be
 committed. Restore only into a stopped, separate copy before replacing a live

@@ -52,7 +52,7 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 	}
 	defer func() {
 		if err != nil {
-			_ = lock.Close()
+			err = errors.Join(err, lock.Close())
 		}
 	}()
 	db, err := openWritable(ctx, absolutePath)
@@ -61,24 +61,21 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 	}
 	defer func() {
 		if err != nil {
-			_ = db.Close()
+			err = errors.Join(err, db.Close())
 		}
 	}()
 
-	schema, err := inspectSchema(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	if schema == schemaUnknown {
-		return nil, fmt.Errorf("inspect existing database: %w", ErrIncompatibleSchema)
-	}
 	store := &Store{db: db, lock: lock}
-	if exists && schema == schemaJava && !hasMigrationLedger(ctx, db) {
+	inspection, inspectErr := inspectSchema(ctx, db)
+	if exists && inspection.kind == inspectionJavaUnmanaged {
 		backupPath, backupErr := options.backup(ctx, db, absolutePath)
 		if backupErr != nil {
 			return nil, backupErr
 		}
 		store.backupPath = backupPath
+	}
+	if inspectErr != nil {
+		return nil, fmt.Errorf("inspect existing database: %w", inspectErr)
 	}
 	if err := configureJournal(ctx, db); err != nil {
 		return nil, err

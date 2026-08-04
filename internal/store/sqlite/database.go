@@ -8,14 +8,15 @@ import (
 	"path/filepath"
 )
 
-type schemaKind uint8
+type inspectionKind uint8
 
 const (
-	schemaEmpty schemaKind = iota
-	schemaJava
-	schemaGo
-	schemaUnknown
+	inspectionEmpty inspectionKind = iota
+	inspectionJavaUnmanaged
+	inspectionGoManaged
 )
+
+type inspection struct{ kind inspectionKind }
 
 func openWritable(ctx context.Context, path string) (*sql.DB, error) {
 	dsn, err := writableDSN(path)
@@ -77,41 +78,80 @@ func configureJournal(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func inspectSchema(ctx context.Context, db *sql.DB) (schemaKind, error) {
+func inspectSchema(ctx context.Context, db *sql.DB) (inspection, error) {
+	tables, err := tableSet(ctx, db)
+	if err != nil {
+		return inspection{}, err
+	}
+	if len(tables) == 0 {
+		return inspection{kind: inspectionEmpty}, nil
+	}
+	if err := validateJavaSchema(ctx, db, tables); err != nil {
+		return inspection{}, err
+	}
+	if !tables[migrationLedgerTable] {
+		return inspection{kind: inspectionJavaUnmanaged}, nil
+	}
+	complete, err := validateLedger(ctx, db)
+	if err != nil {
+		return inspection{kind: inspectionJavaUnmanaged}, err
+	}
+	if !complete {
+		return inspection{kind: inspectionJavaUnmanaged}, nil
+	}
+	return inspection{kind: inspectionGoManaged}, nil
+}
+
+func tableSet(ctx context.Context, db *sql.DB) (map[string]bool, error) {
 	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
 	if err != nil {
-		return schemaUnknown, fmt.Errorf("list SQLite tables: %w", err)
+		return nil, fmt.Errorf("list SQLite tables: %w", err)
 	}
 	defer rows.Close()
 	tables := map[string]bool{}
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return schemaUnknown, fmt.Errorf("scan SQLite table name: %w", err)
+			return nil, fmt.Errorf("scan SQLite table name: %w", err)
 		}
 		tables[name] = true
 	}
 	if err := rows.Err(); err != nil {
-		return schemaUnknown, fmt.Errorf("read SQLite tables: %w", err)
+		return nil, fmt.Errorf("read SQLite tables: %w", err)
 	}
-	if len(tables) == 0 {
-		return schemaEmpty, nil
+	return tables, nil
+}
+
+func validateJavaSchema(ctx context.Context, db *sql.DB, tables map[string]bool) error {
+	for table := range tables {
+		if !allowedJavaTable(table) {
+			return fmt.Errorf("unexpected pre-Go table %s: %w", table, ErrIncompatibleSchema)
+		}
 	}
 	for _, table := range javaTables {
 		if !tables[table.name] {
-			return schemaUnknown, nil
+			return fmt.Errorf("missing required Java table %s: %w", table.name, ErrIncompatibleSchema)
 		}
 		if err := requireColumns(ctx, db, table.name, table.columns); err != nil {
-			return schemaUnknown, err
+			return err
 		}
 		if err := requireIndexes(ctx, db, table.name, table.indexes); err != nil {
-			return schemaUnknown, err
+			return err
 		}
 	}
-	if tables[migrationLedgerTable] {
-		return schemaGo, nil
+	return nil
+}
+
+func allowedJavaTable(table string) bool {
+	if table == migrationLedgerTable || table == "databasechangelog" || table == "databasechangeloglock" {
+		return true
 	}
-	return schemaJava, nil
+	for _, contract := range javaTables {
+		if contract.name == table {
+			return true
+		}
+	}
+	return false
 }
 
 type tableContract struct {
@@ -123,11 +163,13 @@ type tableContract struct {
 var javaTables = []tableContract{
 	{"system_user", []string{"id", "username", "password", "role", "valid_status", "create_time", "update_time"}, nil},
 	{"system_config", []string{"id", "key", "value", "valid_status", "create_time", "update_time"}, nil},
-	{"sonarr_title", []string{"id", "tvdb_id", "main_title", "title", "clean_title", "season_number", "valid_status", "series_id"}, []string{"sonarr_title_tvdb_id_idx", "sonarr_title_clean_title_idx"}},
-	{"radarr_title", []string{"id", "tmdb_id", "main_title", "title", "clean_title", "year", "valid_status", "movie_id"}, nil},
-	{"tmdb_title", []string{"id", "tvdb_id", "tmdb_id", "language", "title", "valid_status"}, []string{"tmdb_title_tvdb_id_idx", "tmdb_title_tmdb_id_idx"}},
-	{"sonarr_rule", []string{"id", "token", "priority", "regex", "replacement", "offset", "valid_status"}, nil},
-	{"radarr_rule", []string{"id", "token", "priority", "regex", "replacement", "offset", "valid_status"}, nil},
+	{"sonarr_title", []string{"id", "tvdb_id", "sno", "main_title", "title", "clean_title", "season_number", "monitored", "valid_status", "create_time", "update_time", "series_id"}, []string{"sonarr_title_tvdb_id_idx", "sonarr_title_clean_title_idx"}},
+	{"radarr_title", []string{"id", "tmdb_id", "sno", "main_title", "title", "clean_title", "year", "monitored", "valid_status", "create_time", "update_time", "movie_id"}, nil},
+	{"tmdb_title", []string{"id", "tvdb_id", "tmdb_id", "language", "title", "valid_status", "create_time", "update_time"}, []string{"tmdb_title_tvdb_id_idx", "tmdb_title_tmdb_id_idx"}},
+	{"sonarr_rule", []string{"id", "token", "priority", "regex", "replacement", "offset", "example", "remark", "author", "valid_status", "create_time", "update_time"}, nil},
+	{"radarr_rule", []string{"id", "token", "priority", "regex", "replacement", "offset", "example", "remark", "author", "valid_status", "create_time", "update_time"}, nil},
+	{"sonarr_example", []string{"hash", "original_text", "format_text", "valid_status", "create_time", "update_time"}, nil},
+	{"radarr_example", []string{"hash", "original_text", "format_text", "valid_status", "create_time", "update_time"}, nil},
 }
 
 func requireColumns(ctx context.Context, db *sql.DB, table string, required []string) error {

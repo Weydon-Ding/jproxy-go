@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -14,7 +15,7 @@ func acquireWriterLock(databasePath string) (*writerLock, error) {
 	}
 	if err := lockFile(file); err != nil {
 		closeErr := file.Close()
-		return nil, fmt.Errorf("acquire SQLite writer lock: %w", errorsJoin(err, closeErr))
+		return nil, fmt.Errorf("acquire SQLite writer lock: %w", errors.Join(err, closeErr))
 	}
 	return &writerLock{file: file}, nil
 }
@@ -22,15 +23,5 @@ func acquireWriterLock(databasePath string) (*writerLock, error) {
 func (l *writerLock) Close() error {
 	unlockErr := unlockFile(l.file)
 	closeErr := l.file.Close()
-	return errorsJoin(unlockErr, closeErr)
-}
-
-func errorsJoin(first, second error) error {
-	if first == nil {
-		return second
-	}
-	if second == nil {
-		return first
-	}
-	return fmt.Errorf("%w; cleanup: %v", first, second)
+	return errors.Join(unlockErr, closeErr)
 }
