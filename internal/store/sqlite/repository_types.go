@@ -1,10 +1,15 @@
 package sqlite
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 const batchLimit = 200
 
 var ErrBatchTooLarge = errors.New("SQLite repository batch exceeds 200 rows")
+var ErrInvalidValidStatus = errors.New("invalid valid status")
+var ErrInvalidMonitoredStatus = errors.New("invalid monitored status")
 
 type ValidStatus int64
 
@@ -20,103 +25,36 @@ const (
 	Monitored   MonitoredStatus = 1
 )
 
+func ParseValidStatus(raw int64) (ValidStatus, error) {
+	if raw != 0 && raw != 1 {
+		return 0, fmt.Errorf("%d: %w", raw, ErrInvalidValidStatus)
+	}
+	return ValidStatus(raw), nil
+}
+func ParseMonitoredStatus(raw int64) (MonitoredStatus, error) {
+	if raw != 0 && raw != 1 {
+		return 0, fmt.Errorf("%d: %w", raw, ErrInvalidMonitoredStatus)
+	}
+	return MonitoredStatus(raw), nil
+}
+func validStatus(status ValidStatus) error { _, err := ParseValidStatus(int64(status)); return err }
+func monitoredStatus(status MonitoredStatus) error {
+	_, err := ParseMonitoredStatus(int64(status))
+	return err
+}
+
 type SystemConfigID int64
 type SystemUserID int64
 type SonarrTitleID int64
 type RadarrTitleID int64
 type TMDBTitleID int64
 type RuleID string
-type PageInput struct{ Current, Size int64 }
-type PageResult[T any] struct {
-	Current, Size, Total int64
-	List                 []T
-}
-
-func (p PageInput) normalized() PageInput {
-	if p.Current < 1 {
-		p.Current = 1
-	}
-	if p.Size < 1 {
-		p.Size = 10
-	}
-	if p.Size > 200 {
-		p.Size = 200
-	}
-	return p
-}
-
-type SystemConfig struct {
-	ID                     SystemConfigID
-	Key                    string
-	Value                  *string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
-}
-type SystemUser struct {
-	ID                     SystemUserID
-	Username               string
-	Password, Role         *string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
-}
-type SonarrRule struct {
-	ID                     RuleID
-	Token                  string
-	Priority               int64
-	Regex, Replacement     string
-	Offset                 int64
-	Example                string
-	Remark, Author         *string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
-}
-type RadarrRule SonarrRule
-type SonarrTitle struct {
-	ID                           SonarrTitleID
-	TVDBID, SNO                  int64
-	MainTitle, Title, CleanTitle string
-	SeasonNumber                 int64
-	Monitored                    MonitoredStatus
-	ValidStatus                  ValidStatus
-	CreateTime, UpdateTime       *string
-	SeriesID                     *int64
-}
-type RadarrTitle struct {
-	ID                           RadarrTitleID
-	TMDBID, SNO                  int64
-	MainTitle, Title, CleanTitle string
-	Year                         int64
-	Monitored                    MonitoredStatus
-	ValidStatus                  ValidStatus
-	CreateTime, UpdateTime       *string
-	MovieID                      *int64
-}
-type TMDBTitle struct {
-	ID                     TMDBTitleID
-	TVDBID                 int64
-	TMDBID                 *int64
-	Language, Title        string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
-}
-type RuleFilter struct {
-	Page          PageInput
-	Token, Remark *string
-}
-type SonarrTitleFilter struct {
-	Page   PageInput
-	Title  *string
-	TVDBID *int64
-}
-type RadarrTitleFilter struct {
-	Page   PageInput
-	Title  *string
-	TMDBID *int64
-}
-type TMDBTitleFilter struct {
-	Page   PageInput
-	Title  *string
-	TVDBID *int64
-}
 type RadarrTitleBatch struct{ Rows []RadarrTitle }
 type RadarrTitleIDs struct{ IDs []RadarrTitleID }
+type SonarrTitleBatch struct{ Rows []SonarrTitle }
+type SonarrTitleIDs struct{ IDs []SonarrTitleID }
+type TMDBTitleBatch struct{ Rows []TMDBTitle }
+type TMDBTitleIDs struct{ IDs []TMDBTitleID }
+type SonarrRuleBatch struct{ Rows []SonarrRule }
+type RadarrRuleBatch struct{ Rows []RadarrRule }
+type RuleIDs struct{ IDs []RuleID }
