@@ -21,7 +21,7 @@ Included:
 Not included in v0.1.0:
 
 - Web admin UI, login/JWT
-- SQLite / Java database compatibility
+- SQLite writes, migrations, UI management, or runtime synchronization
 - Full title library, aliases, or remote rule synchronization
 - Downloader integration
 
@@ -141,6 +141,8 @@ See `configs/jproxy.env.example`.
 | `CACHE_EXPIRES` | `4320` | Offset cache TTL in minutes. |
 | `OFFSET_CACHE_MAX_ENTRIES` | `1000` | Maximum number of cached offset entries. |
 | `HTTP_TIMEOUT_SECONDS` | `60` | Upstream HTTP timeout in seconds. |
+| `JPROXY_DB_ENABLED` | `false` | Load both formatter payloads from a read-only SQLite snapshot at startup. |
+| `JPROXY_DB_PATH` | none | Required when DB mode is enabled; ignored while DB mode is disabled. |
 | `JPROXY_RADARR_FORMAT_ENABLED` | `false` | Enable the Phase 1 Radarr-only XML title formatter. |
 | `JPROXY_RADARR_FORMAT` | none | Required template when formatting is enabled; it must contain `{title}`. |
 | `JPROXY_RADARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for `{cleanTitle}` rules. |
@@ -152,7 +154,27 @@ See `configs/jproxy.env.example`.
 | `JPROXY_SONARR_FORMAT_RULES` | `[]` | Static JSON array of Sonarr `token`, `regex`, `replacement`, optional numeric `offset`/`priority`, and optional `validStatus` rules. |
 | `JPROXY_SONARR_TITLES` | `[]` | Optional static JSON title array with `mainTitle`, `title`, `cleanTitle`, and required `seasonNumber`, used by Sonarr `{cleanTitle}` title rules. |
 
-## Radarr Title Formatting (Phase 1)
+## SQLite Formatter Snapshot
+
+Set `JPROXY_DB_ENABLED=true` and `JPROXY_DB_PATH` to an existing SQLite file to
+load formatter payloads once during startup. jproxy-go uses the pure-Go
+`modernc.org/sqlite` driver with a read-only URI, query-only mode, one
+connection, and one read-only transaction. The database closes before serving
+requests; it is never created, migrated, written, polled, watched, or reloaded.
+
+The snapshot requires exactly one active non-NULL `system_config` value each for
+`radarrIndexerFormat`, `sonarrIndexerFormat`, and `cleanTitleRegex`. It loads
+active Radarr/Sonarr rules and titles, and uses the database clean-title regex
+for both formatters. Invalid or incomplete records fail startup.
+
+Database mode is all-or-nothing for formatter payloads: `*_FORMAT`, rules,
+titles, and clean-regex environment variables are ignored, so no formatter
+mixes database and environment data. `JPROXY_RADARR_FORMAT_ENABLED` and
+`JPROXY_SONARR_FORMAT_ENABLED` remain independent execution switches. The
+database is still opened and validated when both switches are false. With
+database mode disabled, existing environment JSON behavior is unchanged.
+
+## Radarr Title Formatting
 
 Phase 1 provides an opt-in, static Radarr XML title formatter. It runs only for
 Radarr responses after upstream requests and search expansion complete, before a
@@ -171,11 +193,10 @@ disables it for every token, including `title` and `year`. Any other explicit
 matching.
 
 `{cleanTitle}` title rules require optional static records in
-`JPROXY_RADARR_TITLES`; Phase 1 does not sync titles, read SQLite, or expose UI
-configuration. See `configs/jproxy.env.example` for an escaped environment-file
-example.
+`JPROXY_RADARR_TITLES` when database mode is disabled. See
+`configs/jproxy.env.example` for an escaped environment-file example.
 
-## Sonarr Title Formatting (Static Slice)
+## Sonarr Title Formatting
 
 Sonarr formatting is independently opt-in through `JPROXY_SONARR_FORMAT_ENABLED`.
 It runs only for Sonarr responses after upstream requests and search expansion
@@ -189,8 +210,9 @@ Each record requires `mainTitle`, at least one of `title` or `cleanTitle`, and
 Radarr, they do not perform a year consistency check. A season number other than
 `-1` or `1` fills `{season}` as `S<number>`. If `{episode}` cannot be resolved,
 the formatter uses the complete matching title plus optional description, which
-matches the Java fallback. No database, title sync, API/UI configuration, local
-rule files, or remote rule source is included.
+matches the Java fallback. Database snapshot mode provides only formatter
+payloads; title sync, API/UI configuration, local rule files, remote rule
+sources, and runtime reload are not included.
 
 ## Sonarr/Radarr indexer URLs
 
@@ -223,6 +245,7 @@ go build ./cmd/jproxy
 
 ## Migration note
 
-This README only documents the v0.1.0 MVP plus opt-in static Radarr and Sonarr
-formatters. The original Java JProxy database, UI, login, title synchronization,
-and remote rule features remain out of scope.
+This README documents the v0.1.0 MVP plus opt-in Radarr and Sonarr formatters.
+The original Java JProxy UI, login, title synchronization, remote rule features,
+and all database writes remain out of scope. SQLite support is limited to the
+read-only formatter snapshot described above.
