@@ -92,6 +92,13 @@ Phase 1 implementation notes:
 - Static titles support only `mainTitle`, `title`, `cleanTitle`, and `year` for
   `{cleanTitle}` matching. There is no title synchronization, database access,
   UI, or remote rule source.
+- Local Radarr rules support Java-compatible `priority` and `validStatus`:
+  lower numeric priorities run first; equal priorities preserve JSON declaration
+  order through stable ordering; omitted `priority` is `0`. Omitted
+  `validStatus` and `validStatus: 1` enable a rule, while `validStatus: 0`
+  removes it from title, year, and other token matching. Explicit status values
+  other than `0` or `1` fail startup validation. Ordering/filtering does not
+  mutate the caller-provided rules slice.
 - The formatter runs only for Radarr on a result-cache miss, after expanded
   search/merge/trim and before cache insertion. Cached XML is already formatted;
   disabled and Sonarr paths do not parse or rewrite XML.
