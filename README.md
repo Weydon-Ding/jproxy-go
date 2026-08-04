@@ -144,7 +144,7 @@ See `configs/jproxy.env.example`.
 | `JPROXY_RADARR_FORMAT_ENABLED` | `false` | Enable the Phase 1 Radarr-only XML title formatter. |
 | `JPROXY_RADARR_FORMAT` | none | Required template when formatting is enabled; it must contain `{title}`. |
 | `JPROXY_RADARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for `{cleanTitle}` rules. |
-| `JPROXY_RADARR_FORMAT_RULES` | `[]` | Static JSON array of `token`, `regex`, `replacement`, and optional numeric `offset` rules. |
+| `JPROXY_RADARR_FORMAT_RULES` | `[]` | Static JSON array of `token`, `regex`, `replacement`, optional numeric `offset`/`priority`, and optional `validStatus` rules. |
 | `JPROXY_RADARR_TITLES` | `[]` | Optional static JSON title array with `mainTitle`, `title`, `cleanTitle`, and `year`, used by `{cleanTitle}` title rules. |
 
 ## Radarr Title Formatting (Phase 1)
@@ -157,8 +157,13 @@ upstream XML bytes.
 
 Set `JPROXY_RADARR_FORMAT_ENABLED=true` together with a template containing `{title}` and
 `JPROXY_RADARR_FORMAT_RULES` JSON. Invalid enabled JSON or regular expressions
-fail startup rather than silently changing responses. Rules are evaluated in the
-JSON array order. Unknown template tokens are removed after matching.
+fail startup rather than silently changing responses. Rules run in ascending
+numeric `priority`; equal priorities retain JSON declaration order. Omitted
+`priority` is `0`, so legacy arrays retain declaration order when priorities tie.
+Omitted `validStatus` and `validStatus: 1` enable a rule; `validStatus: 0`
+disables it for every token, including `title` and `year`. Any other explicit
+`validStatus` value fails startup. Unknown template tokens are removed after
+matching.
 
 `{cleanTitle}` title rules require optional static records in
 `JPROXY_RADARR_TITLES`; Phase 1 does not sync titles, read SQLite, or expose UI
