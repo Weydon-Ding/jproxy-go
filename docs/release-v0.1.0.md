@@ -1,6 +1,6 @@
 # v0.1.0 Release Note 草案与发布 Checklist
 
-> 状态：**beta candidate / 部分真实接入已验证**  
+> 状态：**beta candidate / Prowlarr 主线已验证**  
 > 版本定位：**Core Proxy MVP**  
 > 重要说明：v0.1.0 不是原版 Java `jproxy` 的完整替代，仅承诺核心代理 MVP 范围内的原版行为对齐。迁移实现默认对照 `../jproxy`；超出 MVP 的 Java 版能力在本版本明确列为范围外。
 
@@ -87,8 +87,8 @@ v0.1.0 的目标是交付第一个可部署、可真实接入测试的 Go 版核
 - **搜索扩展能力有限**：仅提供基础关键词变体，不等同于原版标题库/别名库驱动的扩展。
 - **配置方式不同**：当前以环境变量为主，不提供 Web UI 配置。
 - **原生 Docker build/run 未验证**：Podman Compose 栈已通过，但不能替代原生 Docker build/run 结论。
-- **真实接入部分完成**：Prowlarr 真实搜索、Sonarr 通过 jproxy-go 接入 Prowlarr 已验证；Jackett 端到端搜索、Radarr 端到端接入仍待验证。
-- **Radarr 验证受源配置阻塞**：当前 Prowlarr 只有 Mikan 动漫源，电影分类 `cat=2000` 无结果，Radarr 拒绝保存索引器；这不是已确认的 jproxy-go 缺陷。
+- **Prowlarr 主线已验证**：Prowlarr 真实搜索、Sonarr 通过 jproxy-go 接入 Prowlarr、Radarr 通过 jproxy-go 接入 Prowlarr 均已验证。
+- **Jackett 非当前主线**：Jackett 容器已在 Podman 栈启动且入口可达/重定向，但端到端搜索仍待后续兼容验证。
 - **复杂 XML 兼容性待增强**：已有单测覆盖基础 XML 合并/裁剪，但仍建议补充真实 Jackett/Prowlarr RSS 样例回归。
 
 ## 5. 验证记录
@@ -110,7 +110,7 @@ v0.1.0 的目标是交付第一个可部署、可真实接入测试的 Go 版核
 | Sonarr UI + Prowlarr 接入 | 已通过 | Sonarr 通过 jproxy-go 的 Prowlarr indexer 测试成功，并验证真实链路。 |
 | jproxy-go limit/empty/offset 行为 | 已通过 | `limit=10` 返回 10 item，`limit=1` 返回 1 item；无结果关键词返回 0 item 且保留 RSS/channel；`offset=10` 与 Prowlarr 直连均为 0 item。 |
 | Jackett 端到端搜索 | 待验证 | Jackett 容器已在 Podman 栈启动且入口可达/重定向，但未执行搜索链路。 |
-| Radarr UI 接入 | 阻塞 | 当前 Prowlarr 只有 Mikan 动漫源，`cat=2000` 无电影结果，Radarr 拒绝保存索引器。 |
+| Radarr UI + Prowlarr 接入 | 已通过 | Radarr 侧已有 2 个 Prowlarr indexer，均指向 jproxy-go；indexer Test 均返回 HTTP 200，release query 返回 123 条结果。 |
 
 ### 本 release note/checklist 更新后的建议验证命令
 
@@ -129,8 +129,7 @@ golangci-lint run
 |---|---|---|---|---|
 | B-001 | 原生 Docker build/run 当前未验证 | Docker 是 v0.1.0 范围内能力，未验证会影响部署可信度。 | P0 | 原生 `docker build` 成功，容器启动后 `/health` 返回 `ok`。 |
 | B-002 | Jackett 端到端搜索未验证 | 当前只确认 Jackett 容器启动且入口可达/重定向，不能证明 Jackett 代理链路可用。 | P1 | 至少完成一组 Jackett 真实搜索，并确认 jproxy-go 路由、query、XML 返回符合预期。 |
-| B-003 | Radarr UI 接入受源配置阻塞 | 当前 Prowlarr 只有 Mikan 动漫源，电影分类无结果，Radarr 拒绝保存索引器。 | P1 | 增加可返回电影分类的 Prowlarr/Jackett 源后，完成 Radarr 索引器 Test 和实际搜索。 |
-| B-004 | 复杂真实 XML 样例回归不足 | XML 合并/裁剪对真实格式存在兼容风险。 | P1 | 收集典型 Jackett/Prowlarr RSS 样例并完成手工或自动回归。 |
+| B-003 | 复杂真实 XML 样例回归不足 | XML 合并/裁剪对真实格式存在兼容风险。 | P1 | 收集典型 Jackett/Prowlarr RSS 样例并完成手工或自动回归。 |
 
 ## 7. 发布前 Checklist
 
@@ -186,9 +185,9 @@ golangci-lint run
 - [ ] Jackett 至少一组真实搜索通过。
 - [x] Prowlarr 至少一组真实搜索通过。
 - [x] Sonarr 通过 jproxy-go 添加/测试索引器通过。
-- [ ] Radarr 通过 jproxy-go 添加/测试索引器通过。
+- [x] Radarr 通过 jproxy-go 添加/测试索引器通过。
 - [x] Sonarr 实际搜索返回可用结果，jproxy-go 不崩溃。
-- [ ] Radarr 实际搜索返回可用结果，jproxy-go 不崩溃。**当前因上游源配置阻塞。**
+- [x] Radarr 实际搜索返回可用结果，jproxy-go 不崩溃。
 
 ### 发布资料
 
@@ -202,14 +201,14 @@ golangci-lint run
 
 ### 当前判断
 
-当前状态建议为：**v0.1.0 beta candidate / 部分真实接入已验证**。
+当前状态建议为：**v0.1.0 beta candidate / Prowlarr 主线已验证**。
 
 原因：
 
 - README、Docker 使用说明、QA 验收清单和 release note/checklist 已补齐。
 - Core Proxy MVP 的代码级验证已有通过记录。
-- Podman Compose 栈已启动，Prowlarr 真实搜索和 Sonarr 通过 jproxy-go 接入 Prowlarr 已验证。
-- 但原生 Docker build/run 当前未验证，Jackett 端到端搜索未验证，Radarr 接入因当前上游源配置阻塞。
+- Podman Compose 栈已启动，Prowlarr 真实搜索、Sonarr 通过 jproxy-go 接入 Prowlarr、Radarr 通过 jproxy-go 接入 Prowlarr 均已验证。
+- 但原生 Docker build/run 当前未验证，Jackett 端到端搜索未验证。
 
 ### 可宣布“测试版就绪”的最低门槛
 
@@ -219,7 +218,7 @@ golangci-lint run
 2. 原生 Docker build 通过。
 3. 原生 Docker run 后 `/health` 返回 `ok`。
 4. 至少一组 Jackett 或 Prowlarr 真实搜索通过；当前 Prowlarr 已通过，Jackett 待验证。
-5. 至少一组 Sonarr 或 Radarr 通过 jproxy-go 的 UI 接入测试与实际搜索通过；当前 Sonarr 已通过，Radarr 因源配置阻塞。
+5. 至少一组 Sonarr 或 Radarr 通过 jproxy-go 的 UI 接入测试与实际搜索通过；当前 Sonarr 和 Radarr 均已通过 Prowlarr 路线验证。
 6. release note 与 QA 文档明确仍未覆盖的范围外能力和已知限制。
 
-在 B-001 关闭前，不建议发布为“测试版完全就绪”；B-002/B-003 应作为剩余集成风险继续跟踪。当前可以发布为“测试版候选，部分真实接入已验证”。
+在 B-001 关闭前，不建议发布为“测试版完全就绪”；B-002/B-003 应作为剩余集成风险继续跟踪。当前可以发布为“测试版候选，Prowlarr 主线已验证”。
