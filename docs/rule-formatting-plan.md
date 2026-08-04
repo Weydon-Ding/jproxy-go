@@ -152,13 +152,39 @@ behavior can diverge without branching deeply in the formatter.
 
 ## Phase 4: Title Library and Database Compatibility
 
-Only after the formatter works from static config:
+Status: read-only SQLite startup snapshots are implemented; real Java DB
+compatibility is blocked by the available source database fixture.
 
-1. Evaluate the Java SQLite schema.
-2. Decide whether jproxy-go reads the Java DB directly or imports data into its
-   own simpler format.
-3. Add title matching and aliases.
-4. Add sync tasks if still needed.
+Implemented slice:
+
+- `JPROXY_DB_ENABLED=true` switches formatter payloads from env JSON to a
+  read-only SQLite snapshot.
+- `JPROXY_DB_PATH` points to an existing SQLite database; the loader opens it in
+  read-only/query-only mode and never writes, creates, or migrates schema.
+- The snapshot reads active `system_config`, `radarr_rule`, `sonarr_rule`,
+  `radarr_title`, and `sonarr_title` rows, then feeds the existing Radarr and
+  Sonarr formatters.
+- Product execution remains controlled by `JPROXY_RADARR_FORMAT_ENABLED` and
+  `JPROXY_SONARR_FORMAT_ENABLED`.
+
+Compatibility validation on 2026-08-04:
+
+- Checked `../jproxy/src/main/resources/database/jproxy.db`; the file exists but
+  is `0` bytes.
+- Starting jproxy-go with `JPROXY_DB_ENABLED=true`, both formatter flags enabled,
+  and that DB path failed at startup with:
+  `no such table: system_config`.
+- Searching under `C:\Users\Administrator\Docker` did not find another
+  `.db`, `.sqlite`, or `.sqlite3` candidate.
+- HTTP DB-mode validation could not proceed because startup correctly fails on
+  the empty/non-schema database.
+
+Remaining work once a populated Java database is available:
+
+1. Run read-only startup validation against the populated Java DB.
+2. Verify real Radarr/Sonarr DB-backed formatting through HTTP routes.
+3. Record any real-data incompatibilities as failing tests before fixing.
+4. Decide separately whether to add write/migration/sync tasks.
 
 ## Suggested First Implementation Task
 
