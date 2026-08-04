@@ -3,13 +3,18 @@ package sqlite
 import "context"
 
 func (t datasetTransaction) UpsertSonarrRules(ctx context.Context, batch SonarrRuleBatch) error {
-	for start := 0; start < len(batch.Rows); start += batchLimit {
-		end := min(start+batchLimit, len(batch.Rows))
-		for _, row := range batch.Rows[start:end] {
-			if err := validStatus(row.ValidStatus); err != nil {
-				return err
-			}
-			if err := upsertSonarrRule(ctx, t.tx, SonarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}); err != nil {
+	inputs := make([]SonarrRuleInput, len(batch.Rows))
+	for index, row := range batch.Rows {
+		inputs[index] = SonarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}
+	}
+	return t.UpsertRemoteSonarrRules(ctx, inputs)
+}
+
+func (t datasetTransaction) UpsertRemoteSonarrRules(ctx context.Context, inputs []SonarrRuleInput) error {
+	for start := 0; start < len(inputs); start += batchLimit {
+		end := min(start+batchLimit, len(inputs))
+		for _, input := range inputs[start:end] {
+			if err := upsertSonarrRule(ctx, t.tx, input); err != nil {
 				return err
 			}
 		}
@@ -46,13 +51,18 @@ func (t datasetTransaction) ReplaceSonarrRules(ctx context.Context, batch Sonarr
 }
 
 func (t datasetTransaction) UpsertRadarrRules(ctx context.Context, batch RadarrRuleBatch) error {
-	for start := 0; start < len(batch.Rows); start += batchLimit {
-		end := min(start+batchLimit, len(batch.Rows))
-		for _, row := range batch.Rows[start:end] {
-			if err := validStatus(row.ValidStatus); err != nil {
-				return err
-			}
-			if err := upsertRadarrRule(ctx, t.tx, RadarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}); err != nil {
+	inputs := make([]RadarrRuleInput, len(batch.Rows))
+	for index, row := range batch.Rows {
+		inputs[index] = RadarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}
+	}
+	return t.UpsertRemoteRadarrRules(ctx, inputs)
+}
+
+func (t datasetTransaction) UpsertRemoteRadarrRules(ctx context.Context, inputs []RadarrRuleInput) error {
+	for start := 0; start < len(inputs); start += batchLimit {
+		end := min(start+batchLimit, len(inputs))
+		for _, input := range inputs[start:end] {
+			if err := upsertRadarrRule(ctx, t.tx, input); err != nil {
 				return err
 			}
 		}

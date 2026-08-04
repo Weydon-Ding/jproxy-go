@@ -14,10 +14,12 @@ type DatasetTransaction interface {
 	UpsertRadarrTitles(context.Context, RadarrTitleBatch) error
 	DeleteRadarrTitles(context.Context, RadarrTitleIDs) error
 	UpsertSonarrRules(context.Context, SonarrRuleBatch) error
+	UpsertRemoteSonarrRules(context.Context, []SonarrRuleInput) error
 	DeleteSonarrRules(context.Context, RuleIDs) error
 	SwitchSonarrRuleStatus(context.Context, RuleIDs, ValidStatus) error
 	ReplaceSonarrRules(context.Context, SonarrRuleBatch) error
 	UpsertRadarrRules(context.Context, RadarrRuleBatch) error
+	UpsertRemoteRadarrRules(context.Context, []RadarrRuleInput) error
 	DeleteRadarrRules(context.Context, RuleIDs) error
 	SwitchRadarrRuleStatus(context.Context, RuleIDs, ValidStatus) error
 	ReplaceRadarrRules(context.Context, RadarrRuleBatch) error
