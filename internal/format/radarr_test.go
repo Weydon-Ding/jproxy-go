@@ -1,9 +1,12 @@
 package format
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func status(value int) *int { return &value }
 
 func TestCleanTitle_matchesJavaFormattingRules(t *testing.T) {
 	// Given
@@ -68,6 +71,120 @@ func TestFormatRadarrXML_rewritesMultipleItemsWithDescriptionAndRules(t *testing
 		if !strings.Contains(got, want) {
 			t.Fatalf("formatted XML missing %q: %s", want, got)
 		}
+	}
+}
+
+func TestFormatRadarrXML_appliesLowerPriorityRulesFirst(t *testing.T) {
+	// Given
+	input := `<rss><channel><item><title>Movie.2024</title></item></channel></rss>`
+	cfg := Config{
+		Format: "{title}",
+		Rules: []Rule{
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "late", Priority: 10},
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "early", Priority: 1},
+		},
+	}
+
+	// When
+	got := RadarrXML(input, cfg)
+
+	// Then
+	if !strings.Contains(got, "<title>early</title>") {
+		t.Fatalf("RadarrXML() = %s, want lower-priority rule to win", got)
+	}
+}
+
+func TestFormatRadarrXML_preservesDeclarationOrderForEqualPriority(t *testing.T) {
+	// Given
+	input := `<rss><channel><item><title>Movie.2024</title></item></channel></rss>`
+	cfg := Config{
+		Format: "{title}",
+		Rules: []Rule{
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "first", Priority: 1},
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "second", Priority: 1},
+		},
+	}
+
+	// When
+	got := RadarrXML(input, cfg)
+
+	// Then
+	if !strings.Contains(got, "<title>first</title>") {
+		t.Fatalf("RadarrXML() = %s, want first declared equal-priority rule to win", got)
+	}
+}
+
+func TestFormatRadarrXML_usesLegacyDeclarationOrderWhenPriorityIsOmitted(t *testing.T) {
+	// Given
+	input := `<rss><channel><item><title>Movie.2024</title></item></channel></rss>`
+	cfg := Config{
+		Format: "{title}",
+		Rules: []Rule{
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "first"},
+			{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "second"},
+		},
+	}
+
+	// When
+	got := RadarrXML(input, cfg)
+
+	// Then
+	if !strings.Contains(got, "<title>first</title>") {
+		t.Fatalf("RadarrXML() = %s, want legacy declaration order", got)
+	}
+}
+
+func TestFormatRadarrXML_excludesDisabledRulesFromEveryTokenMatch(t *testing.T) {
+	// Given
+	input := `<rss><channel><item><title>Movie.2024.1080p</title></item></channel></rss>`
+	cfg := Config{
+		Format: "{title} {year} {resolution}",
+		Rules: []Rule{
+			{Token: "title", Regex: `^(.+?)\.\d{4}.*$`, Replacement: "disabled-title", ValidStatus: status(0)},
+			{Token: "title", Regex: `^(.+?)\.\d{4}.*$`, Replacement: "Movie", ValidStatus: status(1)},
+			{Token: "year", Regex: `.*?(\d{4}).*`, Replacement: "disabled-year", ValidStatus: status(0)},
+			{Token: "year", Regex: `.*?(\d{4}).*`, Replacement: "$1"},
+			{Token: "resolution", Regex: `.*?(1080p).*`, Replacement: "disabled-resolution", ValidStatus: status(0)},
+			{Token: "resolution", Regex: `.*?(1080p).*`, Replacement: "$1"},
+		},
+	}
+
+	// When
+	got := RadarrXML(input, cfg)
+
+	// Then
+	if !strings.Contains(got, "<title>Movie 2024 1080p</title>") || strings.Contains(got, "disabled-") {
+		t.Fatalf("RadarrXML() = %s, want only enabled rules to participate", got)
+	}
+}
+
+func TestRulesByToken_doesNotMutateCallerRulesWhenOrdering(t *testing.T) {
+	// Given
+	rules := []Rule{
+		{Token: "title", Regex: "first", Priority: 10},
+		{Token: "title", Regex: "second", Priority: 1},
+	}
+	want := append([]Rule(nil), rules...)
+
+	// When
+	got := rulesByToken(rules)
+
+	// Then
+	if !reflect.DeepEqual(rules, want) || got["title"][0].Regex != "second" {
+		t.Fatalf("rules=%#v ordered=%#v, want original unchanged and sorted copy", rules, got["title"])
+	}
+}
+
+func TestValidateConfig_rejectsInvalidRuleValidStatus(t *testing.T) {
+	// Given
+	cfg := Config{Format: "{title}", Rules: []Rule{{Token: "title", Regex: `.*`, ValidStatus: status(2)}}}
+
+	// When
+	err := ValidateConfig(cfg)
+
+	// Then
+	if err == nil {
+		t.Fatal("ValidateConfig() error = nil, want invalid validStatus error")
 	}
 }
 

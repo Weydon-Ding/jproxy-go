@@ -91,3 +91,30 @@ func TestRadarrFormattingDoesNotAffectSonarrOrUpstreamErrors(t *testing.T) {
 		t.Fatalf("sonarr=%q radarr error status=%d", sonarr.Body.String(), radarrError.Code)
 	}
 }
+
+func TestRadarrFormatting_skipsDisabledRules(t *testing.T) {
+	// Given
+	xml := `<rss><channel><item><title>Movie.2024</title></item></channel></rss>`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(xml))
+	}))
+	defer upstream.Close()
+	disabled := 0
+	cfg := testConfig(upstream.URL, upstream.URL)
+	cfg.RadarrFormatting = config.RadarrFormattingConfig{
+		Enabled: true,
+		Config: format.Config{
+			Format: "{title}",
+			Rules:  []format.Rule{{Token: "title", Regex: `^(.+?)\.\d{4}$`, Replacement: "Movie", ValidStatus: &disabled}},
+		},
+	}
+
+	// When
+	rec := httptest.NewRecorder()
+	NewServer(cfg).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/radarr/jackett/api?t=search", nil))
+
+	// Then
+	if rec.Code != http.StatusOK || rec.Body.String() != xml {
+		t.Fatalf("response = status %d body %q, want unchanged %q", rec.Code, rec.Body.String(), xml)
+	}
+}

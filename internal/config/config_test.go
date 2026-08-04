@@ -126,6 +126,21 @@ func TestLoadConfigLoadsEnabledRadarrFormatting(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDefaultsOmittedRadarrRulePriorityAndStatus(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "{title}")
+	t.Setenv("JPROXY_RADARR_FORMAT_RULES", `[{"token":"title","regex":"^(.+)$","replacement":"$1"}]`)
+
+	// When
+	cfg, err := LoadConfig()
+
+	// Then
+	if err != nil || len(cfg.RadarrFormatting.Config.Rules) != 1 || cfg.RadarrFormatting.Config.Rules[0].Priority != 0 || cfg.RadarrFormatting.Config.Rules[0].ValidStatus != nil {
+		t.Fatalf("LoadConfig() = %#v, %v, want omitted priority=0 and validStatus=nil", cfg, err)
+	}
+}
+
 func TestLoadConfigRejectsMalformedEnabledRadarrFormatting(t *testing.T) {
 	// Given
 	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
@@ -166,5 +181,20 @@ func TestLoadConfigRejectsInvalidEnabledRadarrCleanTitleRegex(t *testing.T) {
 	// Then
 	if err == nil {
 		t.Fatal("LoadConfig() error = nil, want invalid clean title regex error")
+	}
+}
+
+func TestLoadConfigRejectsInvalidEnabledRadarrRuleValidStatus(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "{title}")
+	t.Setenv("JPROXY_RADARR_FORMAT_RULES", `[{"token":"title","regex":".*","validStatus":2}]`)
+
+	// When
+	_, err := LoadConfig()
+
+	// Then
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid validStatus error")
 	}
 }

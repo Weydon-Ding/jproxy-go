@@ -3,6 +3,7 @@ package format
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,8 @@ type Rule struct {
 	Regex       string `json:"regex"`
 	Replacement string `json:"replacement"`
 	Offset      int    `json:"offset"`
+	Priority    int    `json:"priority"`
+	ValidStatus *int   `json:"validStatus"`
 }
 
 // Title is a static Radarr title entry used only for {cleanTitle} matching.
@@ -95,6 +98,9 @@ func ValidateConfig(cfg Config) error {
 		}
 	}
 	for _, rule := range cfg.Rules {
+		if rule.ValidStatus != nil && *rule.ValidStatus != 0 && *rule.ValidStatus != 1 {
+			return fmt.Errorf("format rule validStatus must be 0 or 1 for token %q", rule.Token)
+		}
 		if rule.Token == "" {
 			return fmt.Errorf("format rule token is required")
 		}
@@ -165,7 +171,15 @@ func formatTitle(text string, cfg Config, rules map[string][]Rule) (string, bool
 func rulesByToken(rules []Rule) map[string][]Rule {
 	result := make(map[string][]Rule)
 	for _, rule := range rules {
+		if rule.ValidStatus != nil && *rule.ValidStatus == 0 {
+			continue
+		}
 		result[rule.Token] = append(result[rule.Token], rule)
+	}
+	for token := range result {
+		sort.SliceStable(result[token], func(left, right int) bool {
+			return result[token][left].Priority < result[token][right].Priority
+		})
 	}
 	return result
 }
