@@ -23,6 +23,9 @@ type repositoryEvidence struct {
 	CancellationWroteFirstReplacementRow bool   `json:"cancellationWroteFirstReplacementRow"`
 	TimestampCreatePreserved             bool   `json:"timestampCreatePreserved"`
 	TimestampUpdateRefreshed             bool   `json:"timestampUpdateRefreshed"`
+	RemoteBatchPreservesDisabledStatus   bool   `json:"remoteBatchPreservesDisabledStatus"`
+	RemoteBatchDefaultsNewStatus         bool   `json:"remoteBatchDefaultsNewStatus"`
+	RemoteBatchRollbackPreservesAuthor   bool   `json:"remoteBatchRollbackPreservesAuthor"`
 }
 
 func TestRepositoryEvidence_writesMeasuredOperations_whenRequested(t *testing.T) {
@@ -125,6 +128,24 @@ func TestRepositoryEvidence_writesMeasuredOperations_whenRequested(t *testing.T)
 		t.Fatal(err)
 	}
 	updated := mustConfig(t, repos, 1)
+	if err := repos.SonarrRules.Upsert(ctx, SonarrRule{ID: "remote-author", Token: "author", Regex: "x", Example: "x", ValidStatus: Invalid}); err != nil {
+		t.Fatal(err)
+	}
+	remoteInputs := remoteSonarrRuleInputs(batchLimit + 1)
+	remoteInputs[0].Rule.ID = "remote-author"
+	if err := store.InTransaction(ctx, func(tx DatasetTransaction) error {
+		return tx.UpsertRemoteSonarrRules(ctx, remoteInputs)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	remoteAuthor := mustSonarrRule(t, repos, "remote-author")
+	remoteNew := mustSonarrRule(t, repos, "sonarr-2")
+	rollbackInputs := remoteSonarrRuleInputs(batchLimit + 1)
+	rollbackInputs[batchLimit].Rule.Offset = 2147483648
+	rollbackErr := store.InTransaction(ctx, func(tx DatasetTransaction) error {
+		return tx.UpsertRemoteSonarrRules(ctx, rollbackInputs)
+	})
+	remoteAfterRollback := mustSonarrRule(t, repos, "remote-author")
 	evidence := repositoryEvidence{
 		OperationsExecuted:                   len(operations),
 		RoundTrips:                           roundTrips,
@@ -139,6 +160,9 @@ func TestRepositoryEvidence_writesMeasuredOperations_whenRequested(t *testing.T)
 		CancellationWroteFirstReplacementRow: firstRowWritten,
 		TimestampCreatePreserved:             updated.CreateTime != nil && *updated.CreateTime == stamp,
 		TimestampUpdateRefreshed:             updated.UpdateTime != nil && *updated.UpdateTime != stamp,
+		RemoteBatchPreservesDisabledStatus:   remoteAuthor.ValidStatus == Invalid,
+		RemoteBatchDefaultsNewStatus:         remoteNew.ValidStatus == Valid,
+		RemoteBatchRollbackPreservesAuthor:   errors.Is(rollbackErr, ErrJavaIntegerRange) && remoteAfterRollback.ValidStatus == Invalid,
 	}
 	data, err := json.MarshalIndent(evidence, "", "  ")
 	if err != nil {
