@@ -7,23 +7,35 @@ import (
 )
 
 func (r sonarrRuleRepo) Upsert(c context.Context, v SonarrRule) error {
-	if err := validStatus(v.ValidStatus); err != nil {
-		return err
-	}
-	return upsertSonarrRule(c, r.db, v)
+	return r.UpsertRemote(c, SonarrRuleInput{Rule: v, ValidStatus: &v.ValidStatus})
 }
 func (r radarrRuleRepo) Upsert(c context.Context, v RadarrRule) error {
-	if err := validStatus(v.ValidStatus); err != nil {
-		return err
-	}
-	return upsertRadarrRule(c, r.db, SonarrRule(v))
+	return r.UpsertRemote(c, RadarrRuleInput{Rule: v, ValidStatus: &v.ValidStatus})
 }
-func upsertSonarrRule(c context.Context, db executor, v SonarrRule) error {
-	_, e := db.ExecContext(c, `INSERT INTO sonarr_rule(id,token,priority,regex,replacement,offset,example,remark,author,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET token=excluded.token,priority=excluded.priority,regex=excluded.regex,replacement=excluded.replacement,offset=excluded.offset,example=excluded.example,remark=excluded.remark,author=excluded.author,valid_status=excluded.valid_status,update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.Token, v.Priority, v.Regex, v.Replacement, v.Offset, v.Example, v.Remark, v.Author, v.ValidStatus, v.CreateTime, v.UpdateTime)
+func (r sonarrRuleRepo) UpsertRemote(c context.Context, input SonarrRuleInput) error {
+	return upsertSonarrRule(c, r.db, input)
+}
+func (r radarrRuleRepo) UpsertRemote(c context.Context, input RadarrRuleInput) error {
+	return upsertRadarrRule(c, r.db, input)
+}
+func upsertSonarrRule(c context.Context, db executor, input SonarrRuleInput) error {
+	if input.ValidStatus != nil {
+		if err := validStatus(*input.ValidStatus); err != nil {
+			return err
+		}
+	}
+	v := input.Rule
+	_, e := db.ExecContext(c, `INSERT INTO sonarr_rule(id,token,priority,regex,replacement,offset,example,remark,author,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,?,?,?,COALESCE(?,1),COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET token=excluded.token,priority=excluded.priority,regex=excluded.regex,replacement=excluded.replacement,offset=excluded.offset,example=excluded.example,remark=excluded.remark,author=excluded.author,valid_status=COALESCE(?,sonarr_rule.valid_status),update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.Token, v.Priority, v.Regex, v.Replacement, v.Offset, v.Example, v.Remark, v.Author, input.ValidStatus, v.CreateTime, v.UpdateTime, input.ValidStatus)
 	return wrap("upsert rule", e)
 }
-func upsertRadarrRule(c context.Context, db executor, v SonarrRule) error {
-	_, e := db.ExecContext(c, `INSERT INTO radarr_rule(id,token,priority,regex,replacement,offset,example,remark,author,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET token=excluded.token,priority=excluded.priority,regex=excluded.regex,replacement=excluded.replacement,offset=excluded.offset,example=excluded.example,remark=excluded.remark,author=excluded.author,valid_status=excluded.valid_status,update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.Token, v.Priority, v.Regex, v.Replacement, v.Offset, v.Example, v.Remark, v.Author, v.ValidStatus, v.CreateTime, v.UpdateTime)
+func upsertRadarrRule(c context.Context, db executor, input RadarrRuleInput) error {
+	if input.ValidStatus != nil {
+		if err := validStatus(*input.ValidStatus); err != nil {
+			return err
+		}
+	}
+	v := SonarrRule(input.Rule)
+	_, e := db.ExecContext(c, `INSERT INTO radarr_rule(id,token,priority,regex,replacement,offset,example,remark,author,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,?,?,?,COALESCE(?,1),COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET token=excluded.token,priority=excluded.priority,regex=excluded.regex,replacement=excluded.replacement,offset=excluded.offset,example=excluded.example,remark=excluded.remark,author=excluded.author,valid_status=COALESCE(?,radarr_rule.valid_status),update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.Token, v.Priority, v.Regex, v.Replacement, v.Offset, v.Example, v.Remark, v.Author, input.ValidStatus, v.CreateTime, v.UpdateTime, input.ValidStatus)
 	return wrap("upsert rule", e)
 }
 func (r sonarrRuleRepo) Get(c context.Context, id RuleID) (v SonarrRule, e error) {

@@ -10,6 +10,7 @@ const batchLimit = 200
 var ErrBatchTooLarge = errors.New("SQLite repository batch exceeds 200 rows")
 var ErrInvalidValidStatus = errors.New("invalid valid status")
 var ErrInvalidMonitoredStatus = errors.New("invalid monitored status")
+var ErrJavaIntegerRange = errors.New("value exceeds Java Integer range")
 
 type ValidStatus int64
 
@@ -49,6 +50,14 @@ type SonarrTitleID int64
 type RadarrTitleID int64
 type TMDBTitleID int64
 type RuleID string
+type SonarrRuleInput struct {
+	Rule        SonarrRule
+	ValidStatus *ValidStatus
+}
+type RadarrRuleInput struct {
+	Rule        RadarrRule
+	ValidStatus *ValidStatus
+}
 type RadarrTitleBatch struct{ Rows []RadarrTitle }
 type RadarrTitleIDs struct{ IDs []RadarrTitleID }
 type SonarrTitleBatch struct{ Rows []SonarrTitle }
@@ -58,3 +67,17 @@ type TMDBTitleIDs struct{ IDs []TMDBTitleID }
 type SonarrRuleBatch struct{ Rows []SonarrRule }
 type RadarrRuleBatch struct{ Rows []RadarrRule }
 type RuleIDs struct{ IDs []RuleID }
+
+func javaInteger(value int64) error {
+	if value < -2147483648 || value > 2147483647 {
+		return fmt.Errorf("%d: %w", value, ErrJavaIntegerRange)
+	}
+	return nil
+}
+
+func javaIntegerPointer(value *int64) error {
+	if value == nil {
+		return nil
+	}
+	return javaInteger(*value)
+}

@@ -9,7 +9,7 @@ func (t datasetTransaction) UpsertSonarrRules(ctx context.Context, batch SonarrR
 			if err := validStatus(row.ValidStatus); err != nil {
 				return err
 			}
-			if err := upsertSonarrRule(ctx, t.tx, row); err != nil {
+			if err := upsertSonarrRule(ctx, t.tx, SonarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}); err != nil {
 				return err
 			}
 		}
@@ -49,11 +49,10 @@ func (t datasetTransaction) UpsertRadarrRules(ctx context.Context, batch RadarrR
 	for start := 0; start < len(batch.Rows); start += batchLimit {
 		end := min(start+batchLimit, len(batch.Rows))
 		for _, row := range batch.Rows[start:end] {
-			value := SonarrRule(row)
-			if err := validStatus(value.ValidStatus); err != nil {
+			if err := validStatus(row.ValidStatus); err != nil {
 				return err
 			}
-			if err := upsertRadarrRule(ctx, t.tx, value); err != nil {
+			if err := upsertRadarrRule(ctx, t.tx, RadarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}); err != nil {
 				return err
 			}
 		}

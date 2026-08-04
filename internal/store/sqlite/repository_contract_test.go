@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"jproxy-go/internal/store/sqlite"
@@ -34,7 +35,8 @@ func (userFake) FindByUsername(context.Context, string) (sqlite.SystemUser, erro
 func (sonarrRuleFake) Get(context.Context, sqlite.RuleID) (sqlite.SonarrRule, error) {
 	return sqlite.SonarrRule{}, nil
 }
-func (sonarrRuleFake) Upsert(context.Context, sqlite.SonarrRule) error { return nil }
+func (sonarrRuleFake) Upsert(context.Context, sqlite.SonarrRule) error            { return nil }
+func (sonarrRuleFake) UpsertRemote(context.Context, sqlite.SonarrRuleInput) error { return nil }
 func (sonarrRuleFake) Page(context.Context, sqlite.RuleFilter) (sqlite.PageResult[sqlite.SonarrRule], error) {
 	return sqlite.PageResult[sqlite.SonarrRule]{}, nil
 }
@@ -48,7 +50,8 @@ func (sonarrRuleFake) Replace(context.Context, sqlite.SonarrRuleBatch) error { r
 func (radarrRuleFake) Get(context.Context, sqlite.RuleID) (sqlite.RadarrRule, error) {
 	return sqlite.RadarrRule{}, nil
 }
-func (radarrRuleFake) Upsert(context.Context, sqlite.RadarrRule) error { return nil }
+func (radarrRuleFake) Upsert(context.Context, sqlite.RadarrRule) error            { return nil }
+func (radarrRuleFake) UpsertRemote(context.Context, sqlite.RadarrRuleInput) error { return nil }
 func (radarrRuleFake) Page(context.Context, sqlite.RuleFilter) (sqlite.PageResult[sqlite.RadarrRule], error) {
 	return sqlite.PageResult[sqlite.RadarrRule]{}, nil
 }
@@ -107,4 +110,36 @@ func TestRepositoryContracts_areExportedAndFakeable(_ *testing.T) {
 	var tmdbTitle sqlite.TMDBTitleRepository = tmdbTitleFake{}
 	repositories := sqlite.Repositories{SystemConfigs: config, SystemUsers: user, SonarrRules: sonarrRule, RadarrRules: radarrRule, SonarrTitles: sonarrTitle, RadarrTitles: radarrTitle, TMDBTitles: tmdbTitle}
 	_ = repositories
+}
+
+func TestRepositories_areUsableThroughExternalStoreConsumer(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "consumer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	repositories := store.Repositories()
+	if err := repositories.SystemConfigs.Upsert(ctx, sqlite.SystemConfig{ID: 1, Key: "k", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repositories.SystemUsers.Upsert(ctx, sqlite.SystemUser{ID: 1, Username: "u", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repositories.SonarrRules.Upsert(ctx, sqlite.SonarrRule{ID: "s", Token: "t", Regex: "x", Example: "x", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repositories.RadarrRules.Upsert(ctx, sqlite.RadarrRule{ID: "r", Token: "t", Regex: "x", Example: "x", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	cleanTitle := "c"
+	if err := repositories.SonarrTitles.Upsert(ctx, sqlite.SonarrTitle{ID: 1, TVDBID: 1, MainTitle: "m", Title: "t", CleanTitle: &cleanTitle, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repositories.RadarrTitles.Upsert(ctx, sqlite.RadarrTitle{ID: 1, TMDBID: 1, MainTitle: "m", Title: "t", CleanTitle: "c", Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repositories.TMDBTitles.Upsert(ctx, sqlite.TMDBTitle{ID: 1, TVDBID: 1, Language: "en", Title: "t", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -17,6 +17,7 @@ type SystemUserRepository interface {
 type SonarrRuleRepository interface {
 	Get(context.Context, RuleID) (SonarrRule, error)
 	Upsert(context.Context, SonarrRule) error
+	UpsertRemote(context.Context, SonarrRuleInput) error
 	Page(context.Context, RuleFilter) (PageResult[SonarrRule], error)
 	UpsertBatch(context.Context, SonarrRuleBatch) error
 	DeleteBatch(context.Context, RuleIDs) error
@@ -26,6 +27,7 @@ type SonarrRuleRepository interface {
 type RadarrRuleRepository interface {
 	Get(context.Context, RuleID) (RadarrRule, error)
 	Upsert(context.Context, RadarrRule) error
+	UpsertRemote(context.Context, RadarrRuleInput) error
 	Page(context.Context, RuleFilter) (PageResult[RadarrRule], error)
 	UpsertBatch(context.Context, RadarrRuleBatch) error
 	DeleteBatch(context.Context, RuleIDs) error
