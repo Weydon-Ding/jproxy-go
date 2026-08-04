@@ -83,7 +83,7 @@ func TestProxy_preservesUpstreamBytes_whenSonarrFormatterIsDisabled(t *testing.T
 	}
 }
 
-func TestProxy_usesDefaultPagination_whenLimitAndOffsetAreInvalid(t *testing.T) {
+func TestProxy_usesDefaultLimit_whenLimitIsInvalid(t *testing.T) {
 	// Given
 	items := make([]string, 101)
 	for index := range items {
@@ -99,13 +99,37 @@ func TestProxy_usesDefaultPagination_whenLimitAndOffsetAreInvalid(t *testing.T) 
 
 	// When
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/radarr/prowlarr/api?t=search&q=Movie+Title+2024&limit=bad&offset=bad", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/radarr/prowlarr/api?t=search&q=Movie+Title+2024&limit=bad", nil))
 
 	// Then
 	if recorder.Code != http.StatusOK || countItems(recorder.Body.String()) != 100 {
 		t.Fatalf("status=%d itemCount=%d", recorder.Code, countItems(recorder.Body.String()))
 	}
-	if len(upstreamQueries) != 1 || upstreamQueries[0].Get("q") != "Movie Title 2024" || upstreamQueries[0].Get("offset") != "bad" || upstreamQueries[0].Get("limit") != "bad" {
+	if len(upstreamQueries) != 1 || upstreamQueries[0].Get("q") != "Movie Title 2024" || upstreamQueries[0].Get("limit") != "bad" {
+		t.Fatalf("upstream queries=%v", upstreamQueries)
+	}
+}
+
+func TestProxy_usesInternalOffsetZero_whenOffsetIsInvalid(t *testing.T) {
+	// Given
+	var upstreamQueries []url.Values
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamQueries = append(upstreamQueries, r.URL.Query())
+		_, _ = w.Write([]byte(rssWithItems(item(r.URL.Query().Get("q")))))
+	}))
+	defer upstream.Close()
+	server := NewServer(testConfig(upstream.URL, upstream.URL))
+	handler := server.Routes()
+
+	// When
+	invalidOffset := httptest.NewRecorder()
+	handler.ServeHTTP(invalidOffset, httptest.NewRequest(http.MethodGet, "/radarr/prowlarr/api?t=search&q=Movie+Title+2024&limit=2&offset=bad", nil))
+
+	// Then
+	if invalidOffset.Code != http.StatusOK || countItems(invalidOffset.Body.String()) != 2 {
+		t.Fatalf("status=%d items=%d", invalidOffset.Code, countItems(invalidOffset.Body.String()))
+	}
+	if len(upstreamQueries) != 2 || upstreamQueries[0].Get("q") != "Movie Title 2024" || upstreamQueries[0].Get("offset") != "bad" || upstreamQueries[1].Get("q") != "Movie Title" || upstreamQueries[1].Get("offset") != "0" {
 		t.Fatalf("upstream queries=%v", upstreamQueries)
 	}
 }
