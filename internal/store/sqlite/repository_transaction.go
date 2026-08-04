@@ -74,6 +74,9 @@ func (t datasetTransaction) UpsertRadarrTitles(ctx context.Context, batch Radarr
 }
 func (t datasetTransaction) DeleteRadarrTitles(ctx context.Context, ids RadarrTitleIDs) error {
 	for _, id := range ids.IDs {
+		if err := javaInteger(int64(id)); err != nil {
+			return err
+		}
 		if _, err := t.tx.ExecContext(ctx, `DELETE FROM radarr_title WHERE id=?`, id); err != nil {
 			return wrap("delete radarr title", err)
 		}
@@ -97,6 +100,9 @@ func (t datasetTransaction) UpsertSonarrTitles(ctx context.Context, b SonarrTitl
 }
 func (t datasetTransaction) DeleteSonarrTitles(ctx context.Context, ids SonarrTitleIDs) error {
 	for _, id := range ids.IDs {
+		if err := javaInteger(int64(id)); err != nil {
+			return err
+		}
 		if _, err := t.tx.ExecContext(ctx, `DELETE FROM sonarr_title WHERE id=?`, id); err != nil {
 			return wrap("delete sonarr title", err)
 		}
@@ -125,6 +131,9 @@ func (t datasetTransaction) UpsertTMDBTitles(ctx context.Context, b TMDBTitleBat
 }
 func (t datasetTransaction) DeleteTMDBTitles(ctx context.Context, ids TMDBTitleIDs) error {
 	for _, id := range ids.IDs {
+		if err := javaInteger(int64(id)); err != nil {
+			return err
+		}
 		if _, err := t.tx.ExecContext(ctx, `DELETE FROM tmdb_title WHERE id=?`, id); err != nil {
 			return wrap("delete tmdb title", err)
 		}

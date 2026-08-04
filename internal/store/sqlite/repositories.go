@@ -47,6 +47,9 @@ type tmdbTitleRepo struct {
 }
 
 func (r systemConfigRepo) Upsert(c context.Context, v SystemConfig) error {
+	if err := javaInteger(int64(v.ID)); err != nil {
+		return err
+	}
 	if err := validStatus(v.ValidStatus); err != nil {
 		return err
 	}
@@ -61,6 +64,9 @@ func (r systemConfigRepo) Get(c context.Context, id SystemConfigID) (v SystemCon
 func (r systemConfigRepo) UpsertBatch(c context.Context, values []SystemConfig) error {
 	return r.store.InTransaction(c, func(tx DatasetTransaction) error {
 		for _, value := range values {
+			if err := javaInteger(int64(value.ID)); err != nil {
+				return err
+			}
 			if err := validStatus(value.ValidStatus); err != nil {
 				return err
 			}
@@ -72,6 +78,9 @@ func (r systemConfigRepo) UpsertBatch(c context.Context, values []SystemConfig) 
 	})
 }
 func (r systemUserRepo) Upsert(c context.Context, v SystemUser) error {
+	if err := javaInteger(int64(v.ID)); err != nil {
+		return err
+	}
 	if err := validStatus(v.ValidStatus); err != nil {
 		return err
 	}

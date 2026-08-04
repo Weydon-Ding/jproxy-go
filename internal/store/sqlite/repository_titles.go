@@ -94,12 +94,34 @@ func (r radarrTitleRepo) Page(c context.Context, f RadarrTitleFilter) (out PageR
 }
 
 func validateSonarrTitle(v SonarrTitle) error {
+	if err := javaInteger(int64(v.ID)); err != nil {
+		return err
+	}
+	for _, value := range []int64{v.TVDBID, v.SNO, v.SeasonNumber} {
+		if err := javaInteger(value); err != nil {
+			return err
+		}
+	}
+	if err := javaIntegerPointer(v.SeriesID); err != nil {
+		return err
+	}
 	if err := validStatus(v.ValidStatus); err != nil {
 		return err
 	}
 	return monitoredStatus(v.Monitored)
 }
 func validateRadarrTitle(v RadarrTitle) error {
+	if err := javaInteger(int64(v.ID)); err != nil {
+		return err
+	}
+	for _, value := range []int64{v.TMDBID, v.SNO, v.Year} {
+		if err := javaInteger(value); err != nil {
+			return err
+		}
+	}
+	if err := javaIntegerPointer(v.MovieID); err != nil {
+		return err
+	}
 	if err := validStatus(v.ValidStatus); err != nil {
 		return err
 	}
@@ -112,6 +134,15 @@ func upsertSonarrTitle(c context.Context, db executor, v SonarrTitle) error {
 }
 
 func upsertTMDBTitle(c context.Context, db executor, v TMDBTitle) error {
+	if err := javaInteger(int64(v.ID)); err != nil {
+		return err
+	}
+	if err := javaInteger(v.TVDBID); err != nil {
+		return err
+	}
+	if err := javaIntegerPointer(v.TMDBID); err != nil {
+		return err
+	}
 	_, err := db.ExecContext(c, `INSERT INTO tmdb_title(id,tvdb_id,tmdb_id,language,title,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET tvdb_id=excluded.tvdb_id,tmdb_id=excluded.tmdb_id,language=excluded.language,title=excluded.title,valid_status=excluded.valid_status,update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.TVDBID, v.TMDBID, v.Language, v.Title, v.ValidStatus, v.CreateTime, v.UpdateTime)
 	return wrap("upsert tmdb title", err)
 }
