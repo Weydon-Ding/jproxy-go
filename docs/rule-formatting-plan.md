@@ -152,8 +152,8 @@ behavior can diverge without branching deeply in the formatter.
 
 ## Phase 4: Title Library and Database Compatibility
 
-Status: read-only SQLite startup snapshots are implemented; real Java DB
-compatibility is blocked by the available source database fixture.
+Status: read-only SQLite startup snapshots are implemented and validated against
+the user-provided Java runtime database.
 
 Implemented slice:
 
@@ -179,12 +179,29 @@ Compatibility validation on 2026-08-04:
 - HTTP DB-mode validation could not proceed because startup correctly fails on
   the empty/non-schema database.
 
-Remaining work once a populated Java database is available:
+Compatibility validation with user-provided DB on 2026-08-04:
 
-1. Run read-only startup validation against the populated Java DB.
-2. Verify real Radarr/Sonarr DB-backed formatting through HTTP routes.
-3. Record any real-data incompatibilities as failing tests before fixing.
-4. Decide separately whether to add write/migration/sync tasks.
+- Checked `C:\Users\Administrator\Docker\jproxy-go\jproxy.db`; the file is an
+  untracked runtime fixture and is not committed.
+- Read-only schema/data inspection found the required tables and active rows:
+  `system_config` 16 active rows, `radarr_rule` 38, `sonarr_rule` 90,
+  `radarr_title` 856, and `sonarr_title` 415.
+- Required active config keys were present exactly once with non-null values:
+  `radarrIndexerFormat`, `sonarrIndexerFormat`, and `cleanTitleRegex`.
+- Starting a temporary jproxy-go binary with DB mode and both formatter flags
+  enabled returned `/health` HTTP 200 `ok`.
+- With local fake XML upstreams, DB-backed routes returned HTTP 200 and rewrote
+  both Radarr and Sonarr item titles using database templates/rules/titles. The
+  Sonarr fixture `Bleach S01E02 1080p WEB-DL` formatted to
+  `Bleach S1E2 [1080P][WEBDL][-DL]`. The Radarr fixture was also rewritten; its
+  DB main title contains non-ASCII text that rendered as mojibake in the Windows
+  console, so the exact console text is not recorded as a stable assertion.
+
+Remaining work after DB-mode compatibility validation:
+
+1. Repeat DB-backed route validation against real Jackett/Prowlarr upstreams.
+2. Record any real-data incompatibilities as failing tests before fixing.
+3. Decide separately whether to add write/migration/sync tasks.
 
 ## Suggested First Implementation Task
 
