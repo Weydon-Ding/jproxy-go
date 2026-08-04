@@ -52,6 +52,8 @@ Keep the same behavior concepts, but implement them as small Go packages:
 
 ## Phase 1: Radarr XML Title Formatting MVP
 
+Status: implemented as an opt-in static configuration MVP.
+
 Scope:
 
 1. Add `internal/format` package.
@@ -80,6 +82,22 @@ Acceptance criteria:
 - XML remains valid enough for Radarr/Prowlarr consumers.
 - Unknown tokens are removed or left according to the documented MVP rule.
 - Tests cover title-only and title-plus-description input.
+
+Phase 1 implementation notes:
+
+- Configuration is disabled by default and read only from the documented
+  `JPROXY_RADARR_*` environment variables.
+- Rules and optional static titles are JSON arrays parsed and validated at
+  process startup. Invalid enabled configuration fails startup.
+- Static titles support only `mainTitle`, `title`, `cleanTitle`, and `year` for
+  `{cleanTitle}` matching. There is no title synchronization, database access,
+  UI, or remote rule source.
+- The formatter runs only for Radarr on a result-cache miss, after expanded
+  search/merge/trim and before cache insertion. Cached XML is already formatted;
+  disabled and Sonarr paths do not parse or rewrite XML.
+- Successful formatting uses `encoding/xml`; unsupported input, invalid XML,
+  a blank template, a template without `{title}`, or an unmatched title returns
+  the original XML string unchanged.
 
 ## Phase 2: Config File Rules
 

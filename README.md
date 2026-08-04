@@ -22,7 +22,7 @@ Not included in v0.1.0:
 
 - Web admin UI, login/JWT
 - SQLite / Java database compatibility
-- Full title library, aliases, rule formatting
+- Full title library, aliases, Sonarr formatting, or remote rule synchronization
 - Downloader integration
 
 ## Quick start
@@ -141,6 +141,29 @@ See `configs/jproxy.env.example`.
 | `CACHE_EXPIRES` | `4320` | Offset cache TTL in minutes. |
 | `OFFSET_CACHE_MAX_ENTRIES` | `1000` | Maximum number of cached offset entries. |
 | `HTTP_TIMEOUT_SECONDS` | `60` | Upstream HTTP timeout in seconds. |
+| `JPROXY_RADARR_FORMAT_ENABLED` | `false` | Enable the Phase 1 Radarr-only XML title formatter. |
+| `JPROXY_RADARR_FORMAT` | none | Required template when formatting is enabled; it must contain `{title}`. |
+| `JPROXY_RADARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for `{cleanTitle}` rules. |
+| `JPROXY_RADARR_FORMAT_RULES` | `[]` | Static JSON array of `token`, `regex`, `replacement`, and optional numeric `offset` rules. |
+| `JPROXY_RADARR_TITLES` | `[]` | Optional static JSON title array with `mainTitle`, `title`, `cleanTitle`, and `year`, used by `{cleanTitle}` title rules. |
+
+## Radarr Title Formatting (Phase 1)
+
+Phase 1 provides an opt-in, static Radarr XML title formatter. It runs only for
+Radarr responses after upstream requests and search expansion complete, before a
+valid response enters the result cache. Sonarr responses and disabled Radarr
+responses are not parsed or rewritten; disabled mode therefore preserves the
+upstream XML bytes.
+
+Set `JPROXY_RADARR_FORMAT_ENABLED=true` together with a template containing `{title}` and
+`JPROXY_RADARR_FORMAT_RULES` JSON. Invalid enabled JSON or regular expressions
+fail startup rather than silently changing responses. Rules are evaluated in the
+JSON array order. Unknown template tokens are removed after matching.
+
+`{cleanTitle}` title rules require optional static records in
+`JPROXY_RADARR_TITLES`; Phase 1 does not sync titles, read SQLite, or expose UI
+configuration. See `configs/jproxy.env.example` for an escaped environment-file
+example.
 
 ## Sonarr/Radarr indexer URLs
 
@@ -173,4 +196,6 @@ go build ./cmd/jproxy
 
 ## Migration note
 
-This README only documents the v0.1.0 MVP. The original Java JProxy includes database, UI, login, title sync, and rule features that are intentionally out of scope here.
+This README only documents the v0.1.0 MVP plus the opt-in Phase 1 Radarr
+formatter. The original Java JProxy database, UI, login, title synchronization,
+and remote rule features remain out of scope.
