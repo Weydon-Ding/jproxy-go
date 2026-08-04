@@ -50,3 +50,56 @@ func TestRepositories_rejectJavaIntegerOverflowAtomically_whenSecondChunkOverflo
 		t.Fatalf("rows after rejected batch = %+v, error = %v", page, pageErr)
 	}
 }
+
+func TestRuleRepositories_acceptJavaIntegerBounds_whenWritingPriorityAndOffset(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "rule-bounds.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	repos := store.Repositories()
+	sonarr := SonarrRule{ID: "sonarr", Token: "title", Priority: math.MinInt32, Offset: math.MaxInt32, Regex: "x", Example: "x", ValidStatus: Valid}
+	radarr := RadarrRule{ID: "radarr", Token: "title", Priority: math.MaxInt32, Offset: math.MinInt32, Regex: "x", Example: "x", ValidStatus: Valid}
+
+	if err := repos.SonarrRules.Upsert(ctx, sonarr); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.RadarrRules.Upsert(ctx, radarr); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRuleRepositories_rejectJavaIntegerOverflow_whenWritingPriorityOrOffset(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "rule-overflow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	repos := store.Repositories()
+	cases := []struct {
+		name  string
+		write func() error
+	}{
+		{"sonarr priority", func() error {
+			return repos.SonarrRules.Upsert(ctx, SonarrRule{ID: "sp", Priority: math.MaxInt32 + 1, Regex: "x", Example: "x", ValidStatus: Valid})
+		}},
+		{"sonarr offset", func() error {
+			return repos.SonarrRules.Upsert(ctx, SonarrRule{ID: "so", Offset: math.MinInt32 - 1, Regex: "x", Example: "x", ValidStatus: Valid})
+		}},
+		{"radarr priority", func() error {
+			return repos.RadarrRules.Upsert(ctx, RadarrRule{ID: "rp", Priority: math.MaxInt32 + 1, Regex: "x", Example: "x", ValidStatus: Valid})
+		}},
+		{"radarr offset", func() error {
+			return repos.RadarrRules.Upsert(ctx, RadarrRule{ID: "ro", Offset: math.MinInt32 - 1, Regex: "x", Example: "x", ValidStatus: Valid})
+		}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if err := testCase.write(); !errors.Is(err, ErrJavaIntegerRange) {
+				t.Fatalf("write error = %v, want ErrJavaIntegerRange", err)
+			}
+		})
+	}
+}

@@ -19,6 +19,9 @@ func (r radarrRuleRepo) UpsertRemote(c context.Context, input RadarrRuleInput) e
 	return upsertRadarrRule(c, r.db, input)
 }
 func upsertSonarrRule(c context.Context, db executor, input SonarrRuleInput) error {
+	if err := validateSonarrRule(input.Rule); err != nil {
+		return err
+	}
 	if input.ValidStatus != nil {
 		if err := validStatus(*input.ValidStatus); err != nil {
 			return err
@@ -29,6 +32,9 @@ func upsertSonarrRule(c context.Context, db executor, input SonarrRuleInput) err
 	return wrap("upsert rule", e)
 }
 func upsertRadarrRule(c context.Context, db executor, input RadarrRuleInput) error {
+	if err := validateSonarrRule(SonarrRule(input.Rule)); err != nil {
+		return err
+	}
 	if input.ValidStatus != nil {
 		if err := validStatus(*input.ValidStatus); err != nil {
 			return err
@@ -37,6 +43,13 @@ func upsertRadarrRule(c context.Context, db executor, input RadarrRuleInput) err
 	v := SonarrRule(input.Rule)
 	_, e := db.ExecContext(c, `INSERT INTO radarr_rule(id,token,priority,regex,replacement,offset,example,remark,author,valid_status,create_time,update_time) VALUES(?,?,?,?,?,?,?,?,?,COALESCE(?,1),COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(id) DO UPDATE SET token=excluded.token,priority=excluded.priority,regex=excluded.regex,replacement=excluded.replacement,offset=excluded.offset,example=excluded.example,remark=excluded.remark,author=excluded.author,valid_status=COALESCE(?,radarr_rule.valid_status),update_time=COALESCE(excluded.update_time,CURRENT_TIMESTAMP)`, v.ID, v.Token, v.Priority, v.Regex, v.Replacement, v.Offset, v.Example, v.Remark, v.Author, input.ValidStatus, v.CreateTime, v.UpdateTime, input.ValidStatus)
 	return wrap("upsert rule", e)
+}
+
+func validateSonarrRule(rule SonarrRule) error {
+	if err := javaInteger(rule.Priority); err != nil {
+		return err
+	}
+	return javaInteger(rule.Offset)
 }
 func (r sonarrRuleRepo) Get(c context.Context, id RuleID) (v SonarrRule, e error) {
 	return getRule(c, r.db, "sonarr_rule", id)
