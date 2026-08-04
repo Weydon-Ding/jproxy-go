@@ -136,9 +136,19 @@ contract until a release note says so.
 
 ## Phase 3: Sonarr Formatting
 
-After Radarr is proven with real Prowlarr results, add Sonarr support using the
-same formatter primitives. Keep Sonarr-specific rules in separate config so TV
-and movie behavior can diverge without branching deeply in the formatter.
+Status: implemented as an independent opt-in static configuration slice.
+
+The Sonarr formatter uses `JPROXY_SONARR_*` environment variables and separate
+`SonarrConfig` / `SonarrTitle` types so TV season semantics do not alter Radarr
+movie behavior. It reuses rule priority, `validStatus`, clean-title, token, and
+offset primitives, while omitting Radarr year consistency checks. It runs only
+for Sonarr on a result-cache miss after merge/trim and before cache insertion.
+Static title records require `mainTitle`, `title` or `cleanTitle`, and
+`seasonNumber`; no database, title sync, local file rules, UI/API settings, or
+remote source is part of this slice.
+
+Sonarr-specific rules remain in a separate configuration so TV and movie
+behavior can diverge without branching deeply in the formatter.
 
 ## Phase 4: Title Library and Database Compatibility
 

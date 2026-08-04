@@ -20,11 +20,14 @@ Implemented:
 - Query expansion basics.
 - Result and offset caches.
 - RSS/Torznab XML count, merge and trim helpers.
+- Disabled-by-default static Radarr and Sonarr XML title formatters. Each has
+  independent environment JSON configuration and runs after search processing,
+  before result-cache insertion.
 
 Next:
 
 1. Add SQLite store package.
 2. Read original `system_config` records.
 3. Port title/rule sync services.
-4. Extend the opt-in Radarr static title formatter toward full rule formatting.
+4. Extend the opt-in static title formatters toward full rule formatting.
 5. Add API/UI compatibility layer.

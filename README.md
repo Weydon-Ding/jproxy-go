@@ -22,7 +22,7 @@ Not included in v0.1.0:
 
 - Web admin UI, login/JWT
 - SQLite / Java database compatibility
-- Full title library, aliases, Sonarr formatting, or remote rule synchronization
+- Full title library, aliases, or remote rule synchronization
 - Downloader integration
 
 ## Quick start
@@ -146,6 +146,11 @@ See `configs/jproxy.env.example`.
 | `JPROXY_RADARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for `{cleanTitle}` rules. |
 | `JPROXY_RADARR_FORMAT_RULES` | `[]` | Static JSON array of `token`, `regex`, `replacement`, optional numeric `offset`/`priority`, and optional `validStatus` rules. |
 | `JPROXY_RADARR_TITLES` | `[]` | Optional static JSON title array with `mainTitle`, `title`, `cleanTitle`, and `year`, used by `{cleanTitle}` title rules. |
+| `JPROXY_SONARR_FORMAT_ENABLED` | `false` | Enable the static Sonarr XML title formatter. |
+| `JPROXY_SONARR_FORMAT` | none | Required template when Sonarr formatting is enabled; it must contain `{title}`. |
+| `JPROXY_SONARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for Sonarr `{cleanTitle}` rules. |
+| `JPROXY_SONARR_FORMAT_RULES` | `[]` | Static JSON array of Sonarr `token`, `regex`, `replacement`, optional numeric `offset`/`priority`, and optional `validStatus` rules. |
+| `JPROXY_SONARR_TITLES` | `[]` | Optional static JSON title array with `mainTitle`, `title`, `cleanTitle`, and required `seasonNumber`, used by Sonarr `{cleanTitle}` title rules. |
 
 ## Radarr Title Formatting (Phase 1)
 
@@ -169,6 +174,23 @@ matching.
 `JPROXY_RADARR_TITLES`; Phase 1 does not sync titles, read SQLite, or expose UI
 configuration. See `configs/jproxy.env.example` for an escaped environment-file
 example.
+
+## Sonarr Title Formatting (Static Slice)
+
+Sonarr formatting is independently opt-in through `JPROXY_SONARR_FORMAT_ENABLED`.
+It runs only for Sonarr responses after upstream requests and search expansion
+complete, before a valid response enters the result cache. Radarr formatting is
+unaffected. Disabled Sonarr responses are returned without XML parsing or byte
+changes.
+
+Sonarr uses its own static JSON title records rather than Radarr movie records.
+Each record requires `mainTitle`, at least one of `title` or `cleanTitle`, and
+`seasonNumber`. `{cleanTitle}` matches fill `{title}` with `mainTitle`; unlike
+Radarr, they do not perform a year consistency check. A season number other than
+`-1` or `1` fills `{season}` as `S<number>`. If `{episode}` cannot be resolved,
+the formatter uses the complete matching title plus optional description, which
+matches the Java fallback. No database, title sync, API/UI configuration, local
+rule files, or remote rule source is included.
 
 ## Sonarr/Radarr indexer URLs
 
@@ -201,6 +223,6 @@ go build ./cmd/jproxy
 
 ## Migration note
 
-This README only documents the v0.1.0 MVP plus the opt-in Phase 1 Radarr
-formatter. The original Java JProxy database, UI, login, title synchronization,
+This README only documents the v0.1.0 MVP plus opt-in static Radarr and Sonarr
+formatters. The original Java JProxy database, UI, login, title synchronization,
 and remote rule features remain out of scope.
