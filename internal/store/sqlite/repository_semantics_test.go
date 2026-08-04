@@ -115,10 +115,10 @@ func TestRepositories_preserveCreateTimeAndRefreshUpdateTime_whenEveryTableUpdat
 		t.Fatalf("radarr rule=%+v err=%v", radarrRule, err)
 	}
 
-	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, Title: "old", MainTitle: "old", CleanTitle: "old", Monitored: Monitored, ValidStatus: Valid, CreateTime: &createTime, UpdateTime: &updateTime}); err != nil {
+	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, Title: "old", MainTitle: "old", CleanTitle: stringPointer("old"), Monitored: Monitored, ValidStatus: Valid, CreateTime: &createTime, UpdateTime: &updateTime}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, Title: "new", MainTitle: "new", CleanTitle: "new", Monitored: Monitored, ValidStatus: Valid}); err != nil {
+	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, Title: "new", MainTitle: "new", CleanTitle: stringPointer("new"), Monitored: Monitored, ValidStatus: Valid}); err != nil {
 		t.Fatal(err)
 	}
 	sonarrTitle, err := repos.SonarrTitles.Get(ctx, 1)

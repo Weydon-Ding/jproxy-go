@@ -25,13 +25,13 @@ func TestRepositoryMethods_pageAndMapperQueries_whenFiltersAndTitlesExist(t *tes
 	if err != nil || page.Total != 2 || len(page.List) != 1 || page.List[0].ID != "a" {
 		t.Fatalf("page=%+v err=%v", page, err)
 	}
-	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, TVDBID: 7, MainTitle: "main", Title: "original", CleanTitle: "original", Monitored: Monitored, ValidStatus: Valid}); err != nil {
+	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 1, TVDBID: 7, MainTitle: "main", Title: "original", CleanTitle: stringPointer("original"), Monitored: Monitored, ValidStatus: Valid}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repos.TMDBTitles.Upsert(ctx, TMDBTitle{ID: 2, TVDBID: 7, Language: "zh", Title: "translated", ValidStatus: Valid}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 3, TVDBID: 8, MainTitle: "other", Title: "other", CleanTitle: "other", Monitored: Monitored, ValidStatus: Valid}); err != nil {
+	if err := repos.SonarrTitles.Upsert(ctx, SonarrTitle{ID: 3, TVDBID: 8, MainTitle: "other", Title: "other", CleanTitle: stringPointer("other"), Monitored: Monitored, ValidStatus: Valid}); err != nil {
 		t.Fatal(err)
 	}
 	ids, err := repos.SonarrTitles.NeedTMDBSync(ctx)
@@ -39,7 +39,7 @@ func TestRepositoryMethods_pageAndMapperQueries_whenFiltersAndTitlesExist(t *tes
 		t.Fatalf("ids=%v err=%v", ids, err)
 	}
 	joined, err := repos.SonarrTitles.WithTMDBTitles(ctx)
-	if err != nil || len(joined) != 2 || joined[1].Title != "translated" {
+	if err != nil || len(joined) != 3 || joined[0].Title != "translated" || joined[1].Title != "original" || joined[2].Title != "other" {
 		t.Fatalf("joined=%+v err=%v", joined, err)
 	}
 	found, err := repos.TMDBTitles.FindByTVDBID(ctx, 7)
@@ -57,7 +57,7 @@ func TestRepositories_batchesAreAtomic_whenInvalidValueAppearsAfterTwoHundredRow
 	t.Cleanup(func() { _ = store.Close() })
 	rows := make([]SonarrTitle, 201)
 	for index := range rows {
-		rows[index] = SonarrTitle{ID: SonarrTitleID(index + 1), TVDBID: int64(index + 1), Title: "title", MainTitle: "main", CleanTitle: "clean", Monitored: Monitored, ValidStatus: Valid}
+		rows[index] = SonarrTitle{ID: SonarrTitleID(index + 1), TVDBID: int64(index + 1), Title: "title", MainTitle: "main", CleanTitle: stringPointer("clean"), Monitored: Monitored, ValidStatus: Valid}
 	}
 	rows[200].Monitored = MonitoredStatus(2)
 	err = store.Repositories().SonarrTitles.UpsertBatch(ctx, SonarrTitleBatch{Rows: rows})
@@ -116,7 +116,7 @@ func TestRepositories_replaceChunks401Rows_whenEveryDatasetExceedsBatchLimit(t *
 		id := int64(index + 1)
 		sonarrRules[index] = SonarrRule{ID: RuleID("s" + strconv.Itoa(index+1)), Token: "token", Regex: "x", Example: "x", ValidStatus: Valid}
 		radarrRules[index] = RadarrRule{ID: RuleID("r" + strconv.Itoa(index+1)), Token: "token", Regex: "x", Example: "x", ValidStatus: Valid}
-		sonarrTitles[index] = SonarrTitle{ID: SonarrTitleID(id), TVDBID: id, MainTitle: "main", Title: "title", CleanTitle: "clean", Monitored: Monitored, ValidStatus: Valid}
+		sonarrTitles[index] = SonarrTitle{ID: SonarrTitleID(id), TVDBID: id, MainTitle: "main", Title: "title", CleanTitle: stringPointer("clean"), Monitored: Monitored, ValidStatus: Valid}
 		tmdbTitles[index] = TMDBTitle{ID: TMDBTitleID(id), TVDBID: id, Language: "zh", Title: "title", ValidStatus: Valid}
 	}
 	if err := repos.SonarrRules.Replace(ctx, SonarrRuleBatch{Rows: sonarrRules}); err != nil {
@@ -181,7 +181,7 @@ func TestRepositories_pageTitlesAndRollsBackBatches_whenSecondChunkIsInvalid(t *
 	t.Cleanup(func() { _ = store.Close() })
 	repos := store.Repositories()
 	stamp := stringPointer("2026-08-05T12:00:00Z")
-	for _, row := range []SonarrTitle{{ID: 1, TVDBID: 10, MainTitle: "main", Title: "alpha", CleanTitle: "alpha", Monitored: Monitored, ValidStatus: Valid, UpdateTime: stamp}, {ID: 2, TVDBID: 11, MainTitle: "main", Title: "alpha", CleanTitle: "alpha", Monitored: Monitored, ValidStatus: Valid, UpdateTime: stamp}} {
+	for _, row := range []SonarrTitle{{ID: 1, TVDBID: 10, MainTitle: "main", Title: "alpha", CleanTitle: stringPointer("alpha"), Monitored: Monitored, ValidStatus: Valid, UpdateTime: stamp}, {ID: 2, TVDBID: 11, MainTitle: "main", Title: "alpha", CleanTitle: stringPointer("alpha"), Monitored: Monitored, ValidStatus: Valid, UpdateTime: stamp}} {
 		if err := repos.SonarrTitles.Upsert(ctx, row); err != nil {
 			t.Fatal(err)
 		}

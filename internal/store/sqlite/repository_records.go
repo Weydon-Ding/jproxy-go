@@ -27,14 +27,15 @@ type SonarrRule struct {
 }
 type RadarrRule SonarrRule
 type SonarrTitle struct {
-	ID                           SonarrTitleID
-	TVDBID, SNO                  int64
-	MainTitle, Title, CleanTitle string
-	SeasonNumber                 int64
-	Monitored                    MonitoredStatus
-	ValidStatus                  ValidStatus
-	CreateTime, UpdateTime       *string
-	SeriesID                     *int64
+	ID                     SonarrTitleID
+	TVDBID, SNO            int64
+	MainTitle, Title       string
+	CleanTitle             *string
+	SeasonNumber           int64
+	Monitored              MonitoredStatus
+	ValidStatus            ValidStatus
+	CreateTime, UpdateTime *string
+	SeriesID               *int64
 }
 type RadarrTitle struct {
 	ID                           RadarrTitleID
