@@ -12,6 +12,7 @@ import (
 
 	"jproxy-go/internal/cache"
 	"jproxy-go/internal/config"
+	"jproxy-go/internal/format"
 )
 
 type Server struct {
@@ -63,7 +64,9 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		// 初始版未接规则库，这里保留扩展点：xml = s.applyFormatRules(kind, xml)
+		if kind == "radarr" && s.cfg.RadarrFormatting.Enabled {
+			xml = format.RadarrXML(xml, s.cfg.RadarrFormatting.Config)
+		}
 		if xml != "" && hasChannel(xml) {
 			s.resultCache.Set(cacheKey, xml)
 		}
