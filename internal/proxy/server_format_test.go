@@ -1,14 +1,18 @@
 package proxy
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/format"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestRadarrFormattingIsDisabledAndReturnsByteIdenticalXML(t *testing.T) {
@@ -149,4 +153,74 @@ func TestSonarrFormattingRunsBeforeCacheAndDoesNotAffectRadarr(t *testing.T) {
 	if calls != 2 || !strings.Contains(firstSonarr.Body.String(), "<title>Show</title>") || firstSonarr.Body.String() != secondSonarr.Body.String() || !strings.Contains(radarr.Body.String(), "<title>Show.S02E03.1080p</title>") {
 		t.Fatalf("calls=%d sonarr first=%q second=%q radarr=%q", calls, firstSonarr.Body.String(), secondSonarr.Body.String(), radarr.Body.String())
 	}
+}
+
+func TestDatabaseFormatterSnapshot_formatsRadarrAndSonarrThroughHTTPHandlers(t *testing.T) {
+	// Given
+	path := createProxyFormatterDatabase(t)
+	t.Setenv("JPROXY_DB_ENABLED", "true")
+	t.Setenv("JPROXY_DB_PATH", path)
+	t.Setenv("JPROXY_RADARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_SONARR_FORMAT_ENABLED", "true")
+	t.Setenv("JPROXY_RADARR_FORMAT", "invalid env payload")
+	t.Setenv("JPROXY_SONARR_FORMAT", "invalid env payload")
+	radarrUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(rssWithItems(item("Movie.2024.1080p"))))
+	}))
+	defer radarrUpstream.Close()
+	sonarrUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(rssWithItems(item("Show.S02E03.1080p"))))
+	}))
+	defer sonarrUpstream.Close()
+	t.Setenv("JACKETT_URL", radarrUpstream.URL)
+	t.Setenv("PROWLARR_URL", sonarrUpstream.URL)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	handler := NewServer(cfg).Routes()
+
+	// When
+	radarr := httptest.NewRecorder()
+	handler.ServeHTTP(radarr, httptest.NewRequest(http.MethodGet, "/radarr/jackett/api?t=search", nil))
+	sonarr := httptest.NewRecorder()
+	handler.ServeHTTP(sonarr, httptest.NewRequest(http.MethodGet, "/sonarr/prowlarr/api?t=search", nil))
+
+	// Then
+	if radarr.Code != http.StatusOK || !strings.Contains(radarr.Body.String(), "<title>Movie 2024</title>") {
+		t.Fatalf("Radarr response = status %d body %q", radarr.Code, radarr.Body.String())
+	}
+	if sonarr.Code != http.StatusOK || !strings.Contains(sonarr.Body.String(), "<title>Show</title>") {
+		t.Fatalf("Sonarr response = status %d body %q", sonarr.Code, sonarr.Body.String())
+	}
+}
+
+func createProxyFormatterDatabase(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "formatters.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close test database: %v", closeErr)
+		}
+	})
+	statements := []string{
+		`CREATE TABLE system_config (key TEXT, value TEXT, valid_status INTEGER)`,
+		`CREATE TABLE radarr_rule (token TEXT, priority INTEGER, regex TEXT, replacement TEXT, offset INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE sonarr_rule (token TEXT, priority INTEGER, regex TEXT, replacement TEXT, offset INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE radarr_title (main_title TEXT, title TEXT, clean_title TEXT, year INTEGER, valid_status INTEGER)`,
+		`CREATE TABLE sonarr_title (main_title TEXT, title TEXT, clean_title TEXT, season_number INTEGER, valid_status INTEGER)`,
+		`INSERT INTO system_config VALUES ('radarrIndexerFormat', '{title} {year}', 1), ('sonarrIndexerFormat', '{title}', 1), ('cleanTitleRegex', '', 1)`,
+		`INSERT INTO radarr_rule VALUES ('title', 1000, '^(.+?)\.\d{4}.*$', '$1', 0, 1), ('year', 1000, '.*?(\d{4}).*', '$1', 0, 1)`,
+		`INSERT INTO sonarr_rule VALUES ('title', 1000, '^(.+?)\.S\d+E\d+.*$', '$1', 0, 1)`,
+	}
+	for _, statement := range statements {
+		if _, execErr := db.Exec(statement); execErr != nil {
+			t.Fatalf("execute test schema: %v", execErr)
+		}
+	}
+	return path
 }
