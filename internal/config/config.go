@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,6 +11,8 @@ import (
 
 	"jproxy-go/internal/format"
 )
+
+var ErrDatabasePathRequired = errors.New("database path required")
 
 type Config struct {
 	Addr                  string
@@ -70,7 +73,7 @@ func LoadConfig() (Config, error) {
 	if dbEnabled {
 		path := strings.TrimSpace(os.Getenv("JPROXY_DB_PATH"))
 		if path == "" {
-			return Config{}, fmt.Errorf("JPROXY_DB_PATH is required when JPROXY_DB_ENABLED is true")
+			return Config{}, fmt.Errorf("JPROXY_DB_PATH is required when JPROXY_DB_ENABLED is true: %w", ErrDatabasePathRequired)
 		}
 		cfg.Database = DatabaseConfig{Enabled: true, Path: path}
 		cfg.RadarrFormatting.Enabled = radarrFormatEnabled
