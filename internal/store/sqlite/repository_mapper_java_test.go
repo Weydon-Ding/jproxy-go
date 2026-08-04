@@ -17,9 +17,10 @@ func TestSonarrTitles_needTMDBSync_matchesJavaPrimaryLeftJoinSemantics(t *testin
 	repos := store.Repositories()
 	rows := []SonarrTitle{
 		{ID: 1, TVDBID: 10, SNO: 0, MainTitle: "primary", Title: "primary", CleanTitle: stringPointer("primary"), SeasonNumber: -1, Monitored: Monitored, ValidStatus: Valid},
-		{ID: 2, TVDBID: 10, SNO: 1, MainTitle: "primary", Title: "alternate", CleanTitle: stringPointer("alternate"), SeasonNumber: 1, Monitored: Monitored, ValidStatus: Valid},
-		{ID: 3, TVDBID: 20, SNO: 1, MainTitle: "alternate-only", Title: "alternate-only", CleanTitle: stringPointer("alternate-only"), SeasonNumber: 1, Monitored: Monitored, ValidStatus: Valid},
-		{ID: 4, TVDBID: 30, SNO: 0, MainTitle: "mapped", Title: "mapped", CleanTitle: stringPointer("mapped"), SeasonNumber: -1, Monitored: Monitored, ValidStatus: Valid},
+		{ID: 2, TVDBID: 10, SNO: 0, MainTitle: "primary", Title: "duplicate primary", CleanTitle: stringPointer("duplicate-primary"), SeasonNumber: -1, Monitored: Monitored, ValidStatus: Valid},
+		{ID: 3, TVDBID: 10, SNO: 1, MainTitle: "primary", Title: "alternate", CleanTitle: stringPointer("alternate"), SeasonNumber: 1, Monitored: Monitored, ValidStatus: Valid},
+		{ID: 4, TVDBID: 20, SNO: 1, MainTitle: "alternate-only", Title: "alternate-only", CleanTitle: stringPointer("alternate-only"), SeasonNumber: 1, Monitored: Monitored, ValidStatus: Valid},
+		{ID: 5, TVDBID: 30, SNO: 0, MainTitle: "mapped", Title: "mapped", CleanTitle: stringPointer("mapped"), SeasonNumber: -1, Monitored: Monitored, ValidStatus: Valid},
 	}
 	if err := repos.SonarrTitles.UpsertBatch(ctx, SonarrTitleBatch{Rows: rows}); err != nil {
 		t.Fatal(err)
@@ -33,7 +34,7 @@ func TestSonarrTitles_needTMDBSync_matchesJavaPrimaryLeftJoinSemantics(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []int64{10}; !reflect.DeepEqual(got, want) {
+	if want := []int64{10, 10}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("NeedTMDBSync() = %v, want %v", got, want)
 	}
 }

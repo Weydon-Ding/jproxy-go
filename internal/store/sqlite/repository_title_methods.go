@@ -62,7 +62,7 @@ func (r sonarrTitleRepo) Replace(ctx context.Context, b SonarrTitleBatch) error 
 	return r.store.InTransaction(ctx, func(tx DatasetTransaction) error { return tx.ReplaceSonarrTitles(ctx, b) })
 }
 func (r sonarrTitleRepo) NeedTMDBSync(ctx context.Context) ([]int64, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT st.tvdb_id FROM sonarr_title st LEFT JOIN tmdb_title tt ON st.tvdb_id=tt.tvdb_id WHERE st.sno=0 AND tt.tvdb_id IS NULL ORDER BY st.tvdb_id`)
+	rows, err := r.db.QueryContext(ctx, `SELECT st.tvdb_id FROM sonarr_title st LEFT JOIN tmdb_title tt ON st.tvdb_id=tt.tvdb_id WHERE st.sno=0 AND tt.tvdb_id IS NULL ORDER BY st.tvdb_id`)
 	if err != nil {
 		return nil, wrap("find tmdb sync ids", err)
 	}
