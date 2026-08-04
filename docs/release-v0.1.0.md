@@ -82,7 +82,7 @@ v0.1.0 的目标是交付第一个可部署、可真实接入测试的 Go 版核
 ## 4. 不兼容 / 已知限制
 
 - **不是完整 Java jproxy 替代**：v0.1.0 仅覆盖 Core Proxy MVP。
-- **规则格式化缺失**：不会执行原版完整 `executeFormatRule`、`FormatUtil`、RuleService 等规则格式化能力。
+- **完整规则格式化仍缺失**：默认不会执行格式化；可选 Radarr-only Phase 1 静态 XML 标题格式化 MVP 已实现，但不包含原版完整 RuleService、Sonarr 格式化、同步、数据库或 UI 配置能力。
 - **无 Java DB 兼容**：不读取原版 SQLite/Java DB，不迁移 system config、标题库、别名库、规则库。
 - **搜索扩展能力有限**：仅提供基础关键词变体，不等同于原版标题库/别名库驱动的扩展。
 - **配置方式不同**：当前以环境变量为主，不提供 Web UI 配置。

@@ -26,5 +26,5 @@ Next:
 1. Add SQLite store package.
 2. Read original `system_config` records.
 3. Port title/rule sync services.
-4. Port title formatting rules.
+4. Extend the opt-in Radarr static title formatter toward full rule formatting.
 5. Add API/UI compatibility layer.
