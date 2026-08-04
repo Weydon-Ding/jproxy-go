@@ -9,6 +9,7 @@ import (
 )
 
 func TestCreateVerifiedBackup_preservesUncheckpointedWALContent(t *testing.T) {
+	// Given
 	path := javaFinalFixture(t)
 	db := openTestDB(t, path)
 	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
@@ -17,13 +18,43 @@ func TestCreateVerifiedBackup_preservesUncheckpointedWALContent(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO system_user (id, username) VALUES (99, 'wal-row')`); err != nil {
 		t.Fatalf("write WAL row: %v", err)
 	}
+	wal, err := os.Stat(path + "-wal")
+	if err != nil {
+		t.Fatalf("stat WAL: %v", err)
+	}
+	if wal.Size() == 0 {
+		t.Fatal("WAL size = 0, want committed non-empty WAL")
+	}
 	before := logicalDigest(t, path)
+	invalidTarget := filepath.Join(t.TempDir(), "occupied")
+	if err := os.Mkdir(invalidTarget, 0o700); err != nil {
+		t.Fatalf("create occupied target: %v", err)
+	}
+	if _, err := createVerifiedBackupTo(context.Background(), db, invalidTarget); err == nil {
+		t.Fatal("createVerifiedBackupTo() error = nil, want target failure")
+	}
+	if got := logicalDigest(t, path); got != before {
+		t.Fatalf("source digest after target failure = %s, want %s", got, before)
+	}
+
+	// When
 	backupPath, err := createVerifiedBackupTo(context.Background(), db, path+".backup.db")
 	if err != nil {
 		t.Fatalf("createVerifiedBackupTo() error = %v", err)
 	}
 	if got := logicalDigest(t, backupPath); got != before {
 		t.Fatalf("backup logical digest = %s, want %s", got, before)
+	}
+	restored := filepath.Join(t.TempDir(), "restored.db")
+	data, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if err := os.WriteFile(restored, data, 0o600); err != nil {
+		t.Fatalf("write restore: %v", err)
+	}
+	if got := logicalDigest(t, restored); got != before {
+		t.Fatalf("restored logical digest = %s, want %s", got, before)
 	}
 	closeTestDB(t, db)
 }

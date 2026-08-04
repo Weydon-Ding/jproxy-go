@@ -9,6 +9,10 @@ the writable store.
 - An existing database must match the final Java changelog contract, including
   required columns and indexes. Unknown schema or ledger checksum drift fails
   closed before a migration is applied.
+- A present but empty or valid-prefix Go ledger is treated as an incomplete
+  takeover: it receives the same verified pre-migration backup, then resumes
+  the append-only migration sequence. Unknown or checksum-drifted entries fail
+  closed after that backup.
 - Before the first Go migration of a compatible Java database, SQLite performs
   `VACUUM INTO <db>.bak-<UTC timestamp>` without checkpointing or otherwise
   mutating the source first. The backup must
