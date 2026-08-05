@@ -13,23 +13,23 @@ import (
 	"jproxy-go/internal/cache"
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/format"
+	"jproxy-go/internal/runtime"
 )
 
 type Server struct {
 	cfg         config.Config
 	client      *http.Client
+	provider    runtime.Provider
 	resultCache *cache.TTLCache[string]
 	offsetCache *cache.TTLCache[[]int]
+	registry    *runtime.Registry
 }
 
 func NewServer(cfg config.Config) *Server {
-	return &Server{
-		cfg:         cfg,
-		client:      &http.Client{Timeout: cfg.HTTPTimeout},
-		resultCache: cache.NewTTLCache[string](cfg.IndexerResultCacheTTL, cfg.ResultCacheMaxEntries),
-		offsetCache: cache.NewTTLCache[[]int](cfg.OffsetCacheTTL, cfg.OffsetCacheMaxEntries),
-	}
+	return NewServerWithRuntime(cfg, RuntimeOptions{})
 }
+
+func newHTTPClient(cfg config.Config) *http.Client { return &http.Client{Timeout: cfg.HTTPTimeout} }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
@@ -44,7 +44,8 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cacheKey := makeCacheKey(r)
+		snapshot := s.provider.Snapshot()
+		cacheKey := makeCacheKey(r, kindRevision(kind, snapshot))
 		if xml, ok := s.resultCache.Get(cacheKey); ok {
 			writeXML(w, xml)
 			return
@@ -58,17 +59,17 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 		if searchKey == "" {
 			xml, err = s.executeRequest(r, backend, q)
 		} else {
-			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey)
+			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey, snapshot.SearchRevision)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		if kind == "radarr" && s.cfg.RadarrFormatting.Enabled {
-			xml = format.RadarrXML(xml, s.cfg.RadarrFormatting.Config)
+			xml = format.RadarrXML(xml, snapshot.Radarr)
 		}
 		if kind == "sonarr" && s.cfg.SonarrFormatting.Enabled {
-			xml = format.SonarrXML(xml, s.cfg.SonarrFormatting.Config)
+			xml = format.SonarrXML(xml, snapshot.Sonarr)
 		}
 		if xml != "" && hasChannel(xml) {
 			s.resultCache.Set(cacheKey, xml)
@@ -77,7 +78,7 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 	}
 }
 
-func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q url.Values, searchKey string) (string, error) {
+func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q url.Values, searchKey string, revision uint64) (string, error) {
 	searchKey = strings.TrimSuffix(searchKey, " 00")
 	q.Set("q", searchKey)
 	titles := searchTitles(kind, searchKey)
@@ -87,7 +88,7 @@ func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q 
 
 	offset := intParam(q, "offset", 0)
 	limit := intParam(q, "limit", 100)
-	offsetKey := makeOffsetKey(r)
+	offsetKey := makeOffsetKey(r, revision)
 	offsets, ok := s.offsetCache.Get(offsetKey)
 	if !ok || len(offsets) != len(titles) {
 		offsets = make([]int, len(titles))
@@ -176,13 +177,20 @@ func calculateCurrentIndex(offset int, offsets []int) int {
 	return len(offsets) - 1
 }
 
-func makeCacheKey(r *http.Request) string {
-	return r.URL.Path + "?" + regexp.MustCompile(`apikey=[^&]*`).ReplaceAllString(r.URL.RawQuery, "")
+func kindRevision(kind string, snapshot runtime.Snapshot) uint64 {
+	if kind == "radarr" {
+		return snapshot.RadarrRevision
+	}
+	return snapshot.SonarrRevision
 }
 
-func makeOffsetKey(r *http.Request) string {
+func makeCacheKey(r *http.Request, revision uint64) string {
+	return fmt.Sprintf("%d:%s?%s", revision, r.URL.Path, regexp.MustCompile(`apikey=[^&]*`).ReplaceAllString(r.URL.RawQuery, ""))
+}
+
+func makeOffsetKey(r *http.Request, revision uint64) string {
 	s := regexp.MustCompile(`(offset=\d+|apikey=[^&]*)`).ReplaceAllString(r.URL.RawQuery, "")
-	return r.URL.Path + "?" + s
+	return fmt.Sprintf("%d:%s?%s", revision, r.URL.Path, s)
 }
 
 func cloneQuery(q url.Values) url.Values {

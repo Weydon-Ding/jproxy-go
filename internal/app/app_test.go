@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"jproxy-go/internal/config"
+	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
 
 	_ "modernc.org/sqlite"
@@ -77,15 +78,19 @@ func TestRun_closesStoreAfterHTTPShutdown_whenDatabaseModeIsCancelled(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := &fakeStore{snapshot: sqlite.Snapshot{}, snapshotRead: make(chan struct{})}
+	handlerReady := make(chan struct{})
 	deps := productionDependencies()
 	deps.openStore = func(context.Context, string) (runtimeStore, error) { return store, nil }
 	deps.listen = func(network, _ string) (net.Listener, error) { return net.Listen(network, "127.0.0.1:0") }
-	deps.newHandler = func(config.Config) http.Handler { return http.NewServeMux() }
+	deps.newHandler = func(config.Config, runtime.Provider) http.Handler {
+		close(handlerReady)
+		return http.NewServeMux()
+	}
 	result := make(chan error, 1)
 	go func() {
 		result <- run(ctx, config.Config{Addr: "127.0.0.1:0", Database: config.DatabaseConfig{Enabled: true, Path: "temp.db"}}, testLogger(t), deps)
 	}()
-	<-store.snapshotRead
+	<-handlerReady
 
 	// When
 	cancel()
@@ -256,6 +261,10 @@ func (s *fakeStore) Close() error {
 func (s *fakeStore) FormatterSnapshot(context.Context) (sqlite.Snapshot, error) {
 	close(s.snapshotRead)
 	return s.snapshot, nil
+}
+
+func (s *fakeStore) LoadFormatterSnapshot(ctx context.Context) (sqlite.Snapshot, error) {
+	return s.FormatterSnapshot(ctx)
 }
 
 func (*fakeStore) Repositories() sqlite.Repositories { return sqlite.Repositories{} }

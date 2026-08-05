@@ -12,6 +12,7 @@ import (
 
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/proxy"
+	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
 )
 
@@ -20,13 +21,14 @@ const shutdownTimeout = 5 * time.Second
 type runtimeStore interface {
 	Close() error
 	FormatterSnapshot(context.Context) (sqlite.Snapshot, error)
+	LoadFormatterSnapshot(context.Context) (sqlite.Snapshot, error)
 	Repositories() sqlite.Repositories
 }
 
 type runtimeDependencies struct {
 	openStore   func(context.Context, string) (runtimeStore, error)
 	listen      func(string, string) (net.Listener, error)
-	newHandler  func(config.Config) http.Handler
+	newHandler  func(config.Config, runtime.Provider) http.Handler
 	newServer   func(http.Handler) runtimeServer
 	shutdownFor time.Duration
 }
@@ -111,8 +113,8 @@ func productionDependencies() runtimeDependencies {
 	return runtimeDependencies{
 		openStore: sqliteStore,
 		listen:    net.Listen,
-		newHandler: func(cfg config.Config) http.Handler {
-			return proxy.NewServer(cfg).Routes()
+		newHandler: func(cfg config.Config, provider runtime.Provider) http.Handler {
+			return proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider}).Routes()
 		},
 		newServer:   func(handler http.Handler) runtimeServer { return &http.Server{Handler: handler} },
 		shutdownFor: shutdownTimeout,
@@ -132,6 +134,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 	var runErr error
 	var serveErr error
 	serveDone := false
+	var provider runtime.Provider
 
 	if cfg.Database.Enabled {
 		store, runErr = deps.openStore(appCtx, cfg.Database.Path)
@@ -144,14 +147,13 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 		if snapshotErr != nil {
 			return cleanup(cancel, store, listener, server, served, false, failure{FailureSnapshot, snapshotErr}, deps.shutdownFor)
 		}
-		cfg.RadarrFormatting.Config = snapshot.Radarr
-		cfg.SonarrFormatting.Config = snapshot.Sonarr
+		provider = runtime.NewProvider(snapshot, store)
 	}
 	if err := ctx.Err(); err != nil {
 		return cleanup(cancel, store, listener, server, served, false, failure{FailureCleanup, err}, deps.shutdownFor)
 	}
 
-	handler := deps.newHandler(cfg)
+	handler := deps.newHandler(cfg, provider)
 	listener, runErr = deps.listen("tcp", cfg.Addr)
 	if runErr != nil {
 		return cleanup(cancel, store, listener, server, served, false, failure{FailureListen, runErr}, deps.shutdownFor)
