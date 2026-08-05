@@ -3,6 +3,7 @@ package rule
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,13 +13,29 @@ import (
 )
 
 type importObservation struct {
-	partReads            int
-	filesystemOperations int
+	partReads  int
+	operations []string
 }
 
-func (o *importObservation) ObservePartRead() { o.partReads++ }
+func (o *importObservation) Stream(_ string, reader io.Reader) io.Reader {
+	o.partReads++
+	return reader
+}
 
-func (o *importObservation) ObserveFilesystemOperation() { o.filesystemOperations++ }
+func (o *importObservation) Open(string) (io.ReadCloser, error) {
+	o.operations = append(o.operations, "open")
+	return nil, ErrMultipartFilesystemDisabled
+}
+
+func (o *importObservation) Create(string) (io.WriteCloser, error) {
+	o.operations = append(o.operations, "create")
+	return nil, ErrMultipartFilesystemDisabled
+}
+
+func (o *importObservation) Remove(string) error {
+	o.operations = append(o.operations, "remove")
+	return ErrMultipartFilesystemDisabled
+}
 
 func TestHandler_importConsumesMultipartPartWithoutFilesystemOperations(t *testing.T) {
 	// Given
@@ -29,7 +46,7 @@ func TestHandler_importConsumesMultipartPartWithoutFilesystemOperations(t *testi
 	t.Cleanup(func() { _ = store.Close() })
 	observation := &importObservation{}
 	handler := NewHandler(Options{
-		Store: store, Domain: "sonarr", MultipartObserver: observation,
+		Store: store, Domain: "sonarr", MultipartAccess: observation,
 	})
 	boundary := "observation"
 	body := "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"rules.json\"\r\nContent-Type: application/json\r\n\r\n[{\"id\":\"rule\",\"token\":\"title\",\"regex\":\".*\",\"replacement\":\"x\",\"example\":\"x\"}]\r\n--" + boundary + "--\r\n"
@@ -41,7 +58,7 @@ func TestHandler_importConsumesMultipartPartWithoutFilesystemOperations(t *testi
 	handler.ServeHTTP(response, request)
 
 	// Then
-	if response.Code != http.StatusOK || observation.partReads != 1 || observation.filesystemOperations != 0 || bytes.Contains(response.Body.Bytes(), []byte("rules.json")) {
-		t.Fatalf("status=%d part_reads=%d filesystem_operations=%d", response.Code, observation.partReads, observation.filesystemOperations)
+	if response.Code != http.StatusOK || observation.partReads != 1 || len(observation.operations) != 0 || bytes.Contains(response.Body.Bytes(), []byte("rules.json")) {
+		t.Fatalf("status=%d part_reads=%d filesystem_operations=%d", response.Code, observation.partReads, len(observation.operations))
 	}
 }

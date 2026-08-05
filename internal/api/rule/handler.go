@@ -22,21 +22,21 @@ type Syncer interface {
 }
 type Store interface{ Repositories() sqlite.Repositories }
 
-type MultipartObserver interface {
-	ObservePartRead()
-	ObserveFilesystemOperation()
-}
-
 type Options struct {
-	Store             Store
-	Domain            string
-	Invalidate        func(context.Context, string) error
-	Syncer            Syncer
-	MultipartObserver MultipartObserver
+	Store           Store
+	Domain          string
+	Invalidate      func(context.Context, string) error
+	Syncer          Syncer
+	MultipartAccess MultipartAccess
 }
 type Handler struct{ options Options }
 
-func NewHandler(o Options) *Handler { return &Handler{options: o} }
+func NewHandler(o Options) *Handler {
+	if o.MultipartAccess == nil {
+		o.MultipartAccess = streamOnlyMultipartAccess{}
+	}
+	return &Handler{options: o}
+}
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/"+h.options.Domain+"/rule")
 	switch r.Method + " " + path {
