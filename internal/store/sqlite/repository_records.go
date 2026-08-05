@@ -1,11 +1,12 @@
 package sqlite
 
 type SystemConfig struct {
-	ID                     SystemConfigID
-	Key                    string
-	Value                  *string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
+	ID          SystemConfigID `json:"id"`
+	Key         string         `json:"key"`
+	Value       *string        `json:"value,omitempty"`
+	ValidStatus ValidStatus    `json:"validStatus"`
+	CreateTime  *string        `json:"createTime,omitempty"`
+	UpdateTime  *string        `json:"updateTime,omitempty"`
 }
 type SystemUser struct {
 	ID                     SystemUserID
