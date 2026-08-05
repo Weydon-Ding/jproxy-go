@@ -23,7 +23,7 @@ func (h *Handler) importRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, e := mr.NextPart()
-	if e != nil || p.FormName() != "file" || badName(p.FileName()) {
+	if e != nil || p.FormName() != "file" || badName(p.FileName()) || badContentDisposition(p.Header.Get("Content-Disposition")) {
 		writeError(w, 400)
 		return
 	}
@@ -63,6 +63,10 @@ func badName(v string) bool {
 		}
 	}
 	return false
+}
+
+func badContentDisposition(value string) bool {
+	return strings.Contains(value, "..") || strings.Contains(value, `\`) || strings.Contains(value, ":")
 }
 func (h *Handler) importRows(c context.Context, rows []ruleDTO) error {
 	if h.options.Domain == "sonarr" {
