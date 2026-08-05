@@ -42,13 +42,13 @@ func NewHandler(options Options) *Handler { return &Handler{options: options} }
 func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method + " " + request.URL.Path {
 	case http.MethodGet + " /api/system/config/version":
-		h.version(writer)
+		h.version(request.Context(), writer)
 	case http.MethodGet + " /api/system/config/query":
 		h.query(writer, request)
 	case http.MethodPost + " /api/system/config/update":
 		h.update(writer, request)
 	case http.MethodGet + " /api/system/config/author/list":
-		h.authors(writer)
+		h.authors(request.Context(), writer)
 	case http.MethodPost + " /api/system/cache/clearAll":
 		h.clearAll(writer, request)
 	case http.MethodPost + " /api/system/cache/clear":
@@ -73,7 +73,7 @@ func allowedMethod(path string) string {
 	return ""
 }
 
-func (h *Handler) version(writer http.ResponseWriter) {
+func (h *Handler) version(ctx context.Context, writer http.ResponseWriter) {
 	version := h.options.Version
 	if version == "" {
 		version = "dev"
@@ -82,7 +82,7 @@ func (h *Handler) version(writer http.ResponseWriter) {
 	if source == "" {
 		source = defaultVersionURL
 	}
-	if latest, ok := fetchVersion(source); ok && latest != version {
+	if latest, ok := fetchVersion(ctx, source); ok && latest != version {
 		version += " 🚨"
 	}
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -150,8 +150,8 @@ func (h *Handler) clear(writer http.ResponseWriter, request *http.Request) {
 	writer.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) authors(writer http.ResponseWriter) {
-	writeJSON(writer, http.StatusOK, h.authorList())
+func (h *Handler) authors(ctx context.Context, writer http.ResponseWriter) {
+	writeJSON(writer, http.StatusOK, h.authorList(ctx))
 }
 
 func decodeRows(request *http.Request) ([]sqlite.SystemConfig, error) {

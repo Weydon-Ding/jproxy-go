@@ -56,7 +56,7 @@ func TestHandler_updatesAllConfigsAtomicallyAndPublishesSnapshot(t *testing.T) {
 	body := completePayload(t, store)
 	for _, row := range body {
 		if row["key"] == "sonarrIndexerFormat" {
-			row["value"] = "["
+			row["value"] = "{title} {season}"
 		}
 	}
 	encoded, err := json.Marshal(body)
@@ -70,8 +70,40 @@ func TestHandler_updatesAllConfigsAtomicallyAndPublishesSnapshot(t *testing.T) {
 	handler.ServeHTTP(response, request)
 
 	// Then
-	if response.Code != http.StatusBadRequest || provider.Snapshot().Radarr.Format != "{title}" {
+	if response.Code != http.StatusBadRequest || provider.Snapshot().Radarr.Format != "{title} {year}" {
 		t.Fatalf("status=%d snapshot=%q body=%q", response.Code, provider.Snapshot().Radarr.Format, response.Body.String())
+	}
+}
+
+func TestHandler_rejectsMissingFormatterTokensWithoutPublishing(t *testing.T) {
+	cases := []struct{ key, value string }{
+		{"sonarrIndexerFormat", "{title} {season}"}, {"sonarrIndexerFormat", "{title} {episode}"},
+		{"radarrIndexerFormat", "{title}"}, {"radarrIndexerFormat", "{year}"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.key+testCase.value, func(t *testing.T) {
+			store := openSeededStore(t)
+			provider := runtime.NewProvider(snapshot(t, store), store)
+			registry := runtime.NewRegistry(provider, cache.NewTTLCache[string](0, 1), cache.NewTTLCache[[]int](0, 1), cache.NewTTLCache[struct{}](0, 3))
+			handler := system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry})
+			before := provider.Snapshot()
+			body := completePayload(t, store)
+			for _, row := range body {
+				if row["key"] == testCase.key {
+					row["value"] = testCase.value
+				}
+			}
+			payload, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/system/config/update", bytes.NewReader(payload)))
+			after := provider.Snapshot()
+			if response.Code != http.StatusBadRequest || after.RadarrRevision != before.RadarrRevision || after.SonarrRevision != before.SonarrRevision {
+				t.Fatalf("status=%d revisions=%d/%d", response.Code, after.RadarrRevision, after.SonarrRevision)
+			}
+		})
 	}
 }
 

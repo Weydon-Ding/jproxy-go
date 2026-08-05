@@ -17,19 +17,16 @@ func validateValue(key, value string) (string, error) {
 	case "sonarrUrl", "radarrUrl", "jackettUrl", "prowlarrUrl", "qbittorrentUrl", "transmissionUrl", "tmdbUrl":
 		return normalizeURL(value, key == "transmissionUrl")
 	case "sonarrIndexerFormat", "radarrIndexerFormat":
-		if !strings.Contains(value, "{title}") {
-			return "", fmt.Errorf("format requires title token")
+		if key == "sonarrIndexerFormat" && (!strings.Contains(value, "{title}") || !strings.Contains(value, "{season}") || !strings.Contains(value, "{episode}")) {
+			return "", fmt.Errorf("invalid Sonarr format")
+		}
+		if key == "radarrIndexerFormat" && (!strings.Contains(value, "{title}") || !strings.Contains(value, "{year}")) {
+			return "", fmt.Errorf("invalid Radarr format")
 		}
 	case "cleanTitleRegex":
 		if _, err := regexp.Compile(value); err != nil {
 			return "", fmt.Errorf("invalid regex")
 		}
-	case "sonarrLanguage1", "sonarrLanguage2":
-		if !regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`).MatchString(value) {
-			return "", fmt.Errorf("invalid language")
-		}
-	case "ruleSyncAuthors":
-		return normalizeAuthors(value)
 	}
 	return value, nil
 }
@@ -59,20 +56,4 @@ func hasControl(value string) bool {
 		}
 	}
 	return false
-}
-
-func normalizeAuthors(value string) (string, error) {
-	items := strings.Split(value, ",")
-	seen := make(map[string]bool, len(items))
-	for index := range items {
-		items[index] = strings.TrimSpace(items[index])
-		if items[index] == "" || seen[items[index]] || len(items[index]) > 128 || hasControl(items[index]) || strings.Contains(items[index], "/") {
-			return "", fmt.Errorf("invalid authors")
-		}
-		seen[items[index]] = true
-	}
-	if seen["ALL"] && len(items) != 1 {
-		return "", fmt.Errorf("invalid authors")
-	}
-	return strings.Join(items, ","), nil
 }

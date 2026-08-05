@@ -7,9 +7,9 @@ type Config struct {
 }
 
 var configs = []Config{
-	{1, "sonarrUrl", ""}, {2, "sonarrApikey", ""}, {3, "sonarrIndexerFormat", "{title}"},
+	{1, "sonarrUrl", ""}, {2, "sonarrApikey", ""}, {3, "sonarrIndexerFormat", "{title} {season} {episode}"},
 	{5, "sonarrLanguage1", "zh-CN"}, {6, "sonarrLanguage2", "zh-TW"}, {7, "radarrUrl", ""},
-	{8, "radarrApikey", ""}, {9, "radarrIndexerFormat", "{title}"}, {10, "jackettUrl", ""},
+	{8, "radarrApikey", ""}, {9, "radarrIndexerFormat", "{title} {year}"}, {10, "jackettUrl", ""},
 	{11, "prowlarrUrl", ""}, {12, "qbittorrentUrl", ""}, {13, "transmissionUrl", ""},
 	{14, "tmdbUrl", "https://api.themoviedb.org"}, {15, "tmdbApikey", ""}, {16, "cleanTitleRegex", ""},
 	{17, "ruleSyncAuthors", "ALL"}, {18, "qbittorrentUsername", ""}, {19, "qbittorrentPassword", ""},
