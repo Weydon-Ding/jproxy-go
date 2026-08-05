@@ -31,8 +31,10 @@ Implemented:
   while serving and closes after HTTP shutdown. Requests never poll, watch, or
   reload the file.
 - In DB mode only, the root mux mounts six unauthenticated-until-Todo-11 system
-  configuration/cache routes before the proxy fallback. Environment mode has no
-  management routes. Config updates accept exactly the fixed Java-compatible
+  configuration/cache routes, Todo7 rule/example routes, and Todo8 title routes
+  before the proxy fallback. Environment mode has no management routes. Rule and
+  title sync HTTP contracts currently return 503 through local unavailable
+  adapters; remote sync is deferred to Todo9/10. Config updates accept exactly the fixed Java-compatible
   active ID/key set, reject malformed JSON and invalid values with a redacted
   400, validate only local structure (including Go RE2 compilation), commit the
   SQLite rows and formatter snapshot together, then publish that prepared

@@ -48,41 +48,41 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `SystemUserController` | `POST /api/system/user/update` | `update` | Pending migration | Todo 11 |
 | `SystemUserController` | `POST /api/system/user/logout` | `logout` | Pending migration | Todo 11 |
 | `SystemUserController` | `GET /api/system/user/isLoginEnabled` | `isLoginEnabled` | Pending migration | Todo 11 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/sync` | `sync` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `GET /api/sonarr/rule/query` | `query` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/save` | `save` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/remove` | `remove` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/enable` | `enable` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/disable` | `disable` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/export` | `export` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `POST /api/sonarr/rule/import` | `importSonarrRule` | Pending migration | Todo 7 |
-| `SonarrRuleController` | `GET /api/sonarr/rule/token/list` | `listToken` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/sync` | `sync` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `GET /api/radarr/rule/query` | `query` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/save` | `save` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/remove` | `remove` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/enable` | `enable` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/disable` | `disable` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/export` | `export` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `POST /api/radarr/rule/import` | `importRadarrRule` | Pending migration | Todo 7 |
-| `RadarrRuleController` | `GET /api/radarr/rule/token/list` | `listToken` | Pending migration | Todo 7 |
-| `SonarrExampleController` | `POST /api/sonarr/example/save` | `save` | Pending migration | Todo 7 |
-| `SonarrExampleController` | `GET /api/sonarr/example/query` | `query` | Pending migration | Todo 7 |
-| `SonarrExampleController` | `POST /api/sonarr/example/remove` | `remove` | Pending migration | Todo 7 |
-| `RadarrExampleController` | `POST /api/radarr/example/save` | `save` | Pending migration | Todo 7 |
-| `RadarrExampleController` | `GET /api/radarr/example/query` | `query` | Pending migration | Todo 7 |
-| `RadarrExampleController` | `POST /api/radarr/example/remove` | `remove` | Pending migration | Todo 7 |
-| `SonarrTitleController` | `POST /api/sonarr/title/sync` | `sync` | Pending migration | Todo 8/9 |
-| `SonarrTitleController` | `GET /api/sonarr/title/query` | `query` | Pending migration | Todo 8 |
-| `SonarrTitleController` | `POST /api/sonarr/title/remove` | `remove` | Pending migration | Todo 8 |
-| `RadarrTitleController` | `POST /api/radarr/title/sync` | `sync` | Pending migration | Todo 8/9 |
-| `RadarrTitleController` | `GET /api/radarr/title/query` | `query` | Pending migration | Todo 8 |
-| `RadarrTitleController` | `POST /api/radarr/title/remove` | `remove` | Pending migration | Todo 8 |
-| `TmdbTitleController` | `POST /api/tmdb/title/sync` | `sync` | Pending migration | Todo 8/10 |
-| `TmdbTitleController` | `GET /api/tmdb/title/query` | `query` | Pending migration | Todo 8 |
-| `TmdbTitleController` | `POST /api/tmdb/title/remove` | `remove` | Pending migration | Todo 8 |
-| `TmdbTitleController` | `POST /api/tmdb/title/save` | `save` | Pending migration | Todo 8 |
-| `RuleController` | `GET /api/rule/test` | `test` | Pending migration | Todo 7 |
+| `SonarrRuleController` | `POST /api/sonarr/rule/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `SonarrRuleController` | `GET /api/sonarr/rule/query` | `query` | Implemented in Go | DB mode only; deterministic ordering. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/save` | `save` | Implemented in Go | DB mode only. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/remove` | `remove` | Implemented in Go | DB mode only. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/enable` | `enable` | Implemented in Go | DB mode only. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/disable` | `disable` | Implemented in Go | DB mode only. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/export` | `export` | Implemented in Go | DB mode only. |
+| `SonarrRuleController` | `POST /api/sonarr/rule/import` | `importSonarrRule` | Implemented in Go | DB mode only; bounded single-file multipart import is atomic. |
+| `SonarrRuleController` | `GET /api/sonarr/rule/token/list` | `listToken` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `RadarrRuleController` | `GET /api/radarr/rule/query` | `query` | Implemented in Go | DB mode only; deterministic ordering. |
+| `RadarrRuleController` | `POST /api/radarr/rule/save` | `save` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/remove` | `remove` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/enable` | `enable` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/disable` | `disable` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/export` | `export` | Implemented in Go | DB mode only. |
+| `RadarrRuleController` | `POST /api/radarr/rule/import` | `importRadarrRule` | Implemented in Go | DB mode only; bounded single-file multipart import is atomic. |
+| `RadarrRuleController` | `GET /api/radarr/rule/token/list` | `listToken` | Implemented in Go | DB mode only. |
+| `SonarrExampleController` | `POST /api/sonarr/example/save` | `save` | Implemented in Go | DB mode only. |
+| `SonarrExampleController` | `GET /api/sonarr/example/query` | `query` | Implemented in Go | DB mode only; deterministic ordering. |
+| `SonarrExampleController` | `POST /api/sonarr/example/remove` | `remove` | Implemented in Go | DB mode only. |
+| `RadarrExampleController` | `POST /api/radarr/example/save` | `save` | Implemented in Go | DB mode only. |
+| `RadarrExampleController` | `GET /api/radarr/example/query` | `query` | Implemented in Go | DB mode only; deterministic ordering. |
+| `RadarrExampleController` | `POST /api/radarr/example/remove` | `remove` | Implemented in Go | DB mode only. |
+| `SonarrTitleController` | `POST /api/sonarr/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `SonarrTitleController` | `GET /api/sonarr/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse. |
+| `SonarrTitleController` | `POST /api/sonarr/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
+| `RadarrTitleController` | `POST /api/radarr/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `RadarrTitleController` | `GET /api/radarr/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse. |
+| `RadarrTitleController` | `POST /api/radarr/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
+| `TmdbTitleController` | `POST /api/tmdb/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `TmdbTitleController` | `GET /api/tmdb/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse and no-write clean-title projection. |
+| `TmdbTitleController` | `POST /api/tmdb/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
+| `TmdbTitleController` | `POST /api/tmdb/title/save` | `save` | Implemented in Go | DB mode only; supplied, generated and reused `tmdbId` semantics. |
+| `RuleController` | `GET /api/rule/test` | `test` | Implemented in Go | DB mode only; Java-compatible regex projection. |
 
 ## Java Service Behavior Inventory
 
@@ -93,10 +93,10 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `IndexerServiceImpl.executeFormatRule` | base implementation returns XML unchanged | Intentional difference | Go uses opt-in static formatting before cache insertion; disabled formatters preserve bytes. Full Java rule behavior is Todo 7/10. |
 | `SystemConfigServiceImpl` | config query/value lookup/update | Implemented in Go | Update accepts only the active fixed ID/key set, validates structurally without remote Sonarr/Radarr/TMDB/downloader calls, and uses Go RE2 rather than Java regex. Sonarr requires `{title}`, `{season}`, `{episode}`; Radarr requires `{title}`, `{year}`. Language and author values intentionally retain Java-accepted forms except global size/control safety checks. |
 | `SystemCacheServiceImpl` | named cache clear and clear-all | Implemented in Go | DB-only management surface; token auth caches remain unavailable until Todo 11. |
-| `SonarrRuleServiceImpl` / `RadarrRuleServiceImpl` | rule query/page/sync/validity switch | Pending migration | Todo 7 and Todo 10 for remote sync. |
-| `SonarrExampleServiceImpl` / `RadarrExampleServiceImpl` | example CRUD and formatter examples | Pending migration | Todo 7. |
-| `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Pending migration | Static formatter input exists today; persisted titles, sync, and full format behavior are Todos 3, 8, and 9. |
-| `TmdbTitleServiceImpl` | TMDB find, sync, page query | Pending migration | Todos 8 and 10. |
+| `SonarrRuleServiceImpl` / `RadarrRuleServiceImpl` | rule query/page/sync/validity switch | Implemented in Go | CRUD and validity switch are DB-mode routes with deterministic ordering. HTTP sync contract is implemented but real sync is deferred to Todo9/10 and returns 503 until an adapter is installed. |
+| `SonarrExampleServiceImpl` / `RadarrExampleServiceImpl` | example CRUD and formatter examples | Implemented in Go | DB-mode CRUD and deterministic formatter projection; bounded input differs from Java's unbounded acceptance. |
+| `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Implemented in Go | Persisted query/remove APIs are DB-mode routes with deterministic pages; HTTP sync returns 503 until Todo9 installs a real adapter. |
+| `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; HTTP sync returns 503 until Todo10 installs a real adapter. |
 | `SystemUserServiceImpl` | password check, JWT sign/verify/logout, user retrieval/update | Pending migration | Todo 11. |
 | `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Pending migration | Todo 13. |
 | `TransmissionServiceImpl` | RPC login/session, torrent rename | Pending migration | Todo 14 must implement protocol-correct behavior rather than Java placeholders. |
