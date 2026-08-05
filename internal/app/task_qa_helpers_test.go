@@ -2,13 +2,8 @@ package app
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -61,26 +56,6 @@ func taskCanaryLeaks(observed []string) int {
 
 func taskCanaries() []string {
 	return []string{"task-canary-db-path", "task-canary-dsn", "task-canary-api-key", "task-canary-password", "task-canary-token", "task-canary-url", "task-canary-regex", "task-canary-xml", "task-canary-upload-name"}
-}
-
-func directoryDigest(t *testing.T, root string) string {
-	t.Helper()
-	var entries []string
-	err := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path != root {
-			entries = append(entries, filepath.ToSlash(path[len(root):]))
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(entries)
-	sum := sha256.Sum256([]byte(strings.Join(entries, "\n")))
-	return hex.EncodeToString(sum[:])
 }
 
 func measuredManagementRoutes(t *testing.T, base string, include func(managementRoute) bool) int {
