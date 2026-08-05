@@ -62,6 +62,18 @@ func (r *Registry) InvalidateAll(ctx context.Context) error {
 	return nil
 }
 
+// DeleteMarker removes one title-sync retry marker without refreshing runtime
+// snapshots or changing result and offset caches.
+func (r *Registry) DeleteMarker(name string) error {
+	switch name {
+	case SonarrTitleSyncInterval, TMDBTitleSyncInterval, RadarrTitleSyncInterval:
+		r.markers.Delete(name)
+		return nil
+	default:
+		return fmt.Errorf("%q: %w", name, ErrUnknownCacheName)
+	}
+}
+
 // DeleteSystemConfigSyncMarkers is the post-commit half of a prepared system
 // configuration publication. The snapshot has already been atomically swapped.
 func (r *Registry) DeleteSystemConfigSyncMarkers() {
