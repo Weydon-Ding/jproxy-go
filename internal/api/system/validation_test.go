@@ -3,10 +3,7 @@ package system
 import "testing"
 
 func TestValidateRows_acceptsAllFixedIDsAndKeys(t *testing.T) {
-	rows := make([]Config, 0, len(configs))
-	for _, config := range configs {
-		rows = append(rows, config)
-	}
+	rows := append([]Config(nil), configs...)
 	if len(rows) != 20 {
 		t.Fatalf("fixed rows=%d", len(rows))
 	}
