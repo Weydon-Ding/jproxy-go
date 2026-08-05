@@ -174,7 +174,7 @@ func titleAdversarialRoot(t *testing.T) (*sqlite.Store, http.Handler, runtime.Pr
 	proxyServer := proxy.NewServerWithRuntime(rootRouteConfig(true), proxy.RuntimeOptions{Provider: provider, Markers: markers})
 	registry := runtime.NewRegistry(provider, results, offsets, markers)
 	root := http.NewServeMux()
-	root.Handle("/api/", managementRoutes(store, provider, registry))
+	root.Handle("/api/", managementRoutes(store, provider, registry, titleSyncDependencies{}))
 	root.Handle("/", proxyServer.Routes())
 	return store, root, provider, results, offsets, markers
 }

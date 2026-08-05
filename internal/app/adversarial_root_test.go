@@ -203,7 +203,7 @@ func adversarialRoot(t *testing.T) (*sqlite.Store, http.Handler, *controllablePr
 	provider := &controllableProvider{Provider: runtime.NewProvider(snapshot, store)}
 	registry := runtime.NewRegistry(provider, cache.NewTTLCache[string](time.Minute, 8), cache.NewTTLCache[[]int](time.Minute, 8), cache.NewTTLCache[struct{}](time.Minute, 3))
 	root := http.NewServeMux()
-	root.Handle("/api/", managementRoutes(store, provider, registry))
+	root.Handle("/api/", managementRoutes(store, provider, registry, titleSyncDependencies{}))
 	root.Handle("/", proxy.NewServerWithRuntime(rootRouteConfig(true), proxy.RuntimeOptions{Provider: provider}).Routes())
 	return store, root, provider
 }

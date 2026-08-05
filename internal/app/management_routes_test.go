@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +38,11 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 		t.Run(route.method+route.path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			databaseHandler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, bytes.NewReader(route.body)))
-			if response.Code != route.status || response.Header().Get("Content-Type") != route.contentType {
+			expectedStatus := route.status
+			if strings.HasSuffix(route.path, "/title/sync") && !strings.Contains(route.path, "/tmdb/") {
+				expectedStatus = http.StatusInternalServerError
+			}
+			if response.Code != expectedStatus || response.Header().Get("Content-Type") != route.contentType {
 				t.Fatalf("database status=%d type=%q body=%q", response.Code, response.Header().Get("Content-Type"), response.Body.String())
 			}
 
@@ -72,6 +77,59 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 		t.Fatalf("unknown=%d", unknown.Code)
 	}
 	t.Logf("root_management_route_count=%d todo7_route_count=%d todo8_route_count=%d", len(routes), todo7Routes, todo8Routes)
+}
+
+func TestRootHandler_returnsLiveSonarrSync_whenDatabaseModeIsEnabled(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "live-title-sync.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	seedRootConfigs(t, store)
+	snapshot, err := store.FormatterSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v3/series" || request.URL.Query().Get("apikey") != "sonarr-key" {
+			http.NotFound(writer, request)
+			return
+		}
+		_, _ = writer.Write([]byte(`[{"id":1,"tvdbId":2,"title":"Series","titleSlug":"series","monitored":true,"alternateTitles":[]}]`))
+	}))
+	t.Cleanup(upstream.Close)
+	configs, err := store.Repositories().SystemConfigs.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range configs {
+		if configs[index].Key == "sonarrUrl" {
+			configs[index].Value = &upstream.URL
+		}
+		if configs[index].Key == "sonarrApikey" {
+			key := "sonarr-key"
+			configs[index].Value = &key
+		}
+	}
+	if _, err := store.UpdateSystemConfigs(ctx, configs); err != nil {
+		t.Fatal(err)
+	}
+	handler := rootHandler(rootRouteConfig(true), runtime.NewProvider(snapshot, store), store)
+
+	// When
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/sonarr/title/sync", nil))
+
+	// Then
+	if response.Code != http.StatusOK {
+		t.Fatalf("sync status=%d body=%q", response.Code, response.Body.String())
+	}
+	rows, err := store.Repositories().SonarrTitles.Page(ctx, sqlite.SonarrTitleFilter{})
+	if err != nil || len(rows.List) != 2 || rows.List[0].Title != "Series" || rows.List[1].Title != "Series" {
+		t.Fatalf("rows=%+v error=%v", rows.List, err)
+	}
 }
 
 func rootRouteConfig(database bool) config.Config {

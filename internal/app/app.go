@@ -206,7 +206,8 @@ func rootHandler(cfg config.Config, provider runtime.Provider, store managementS
 		return proxyServer.Routes()
 	}
 	root := http.NewServeMux()
-	root.Handle("/api/", managementRoutes(store, provider, proxyServer.CacheRegistry()))
+	registry := proxyServer.CacheRegistry()
+	root.Handle("/api/", managementRoutes(store, provider, registry, liveTitleSyncDependencies(cfg, store, registry)))
 	root.Handle("/", proxyServer.Routes())
 	return root
 }

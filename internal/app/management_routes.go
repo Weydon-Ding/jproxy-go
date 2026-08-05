@@ -25,11 +25,17 @@ func (unavailableTitleSyncer) Sync(context.Context) (title.SyncResult, error) {
 	return title.SyncSucceeded, title.ErrSyncUnavailable
 }
 
-func managementRoutes(store managementStore, provider runtime.Provider, registry *runtime.Registry) http.Handler {
-	return managementRoutesWithMultipartAccess(store, provider, registry, nil)
+type titleSyncDependencies struct {
+	sonarr    title.Syncer
+	radarr    title.Syncer
+	admission title.SyncAdmission
 }
 
-func managementRoutesWithMultipartAccess(store managementStore, provider runtime.Provider, registry *runtime.Registry, multipartAccess rule.MultipartAccess) http.Handler {
+func managementRoutes(store managementStore, provider runtime.Provider, registry *runtime.Registry, syncDependencies titleSyncDependencies) http.Handler {
+	return managementRoutesWithMultipartAccess(store, provider, registry, nil, syncDependencies)
+}
+
+func managementRoutesWithMultipartAccess(store managementStore, provider runtime.Provider, registry *runtime.Registry, multipartAccess rule.MultipartAccess, syncDependencies titleSyncDependencies) http.Handler {
 	root := http.NewServeMux()
 	ruleOptions := func(domain string) rule.Options {
 		return rule.Options{
@@ -42,21 +48,31 @@ func managementRoutesWithMultipartAccess(store managementStore, provider runtime
 	root.Handle("/api/rule/test", rule.NewTestHandler())
 	root.Handle("/api/sonarr/example/", example.NewHandler(example.Options{Store: store, Provider: provider, Domain: "sonarr"}))
 	root.Handle("/api/radarr/example/", example.NewHandler(example.Options{Store: store, Provider: provider, Domain: "radarr"}))
-	root.Handle("/api/sonarr/title/", managementTitleHandler(store, provider, registry))
-	root.Handle("/api/radarr/title/", managementTitleHandler(store, provider, registry))
-	root.Handle("/api/tmdb/title/", managementTitleHandler(store, provider, registry))
+	titleHandler := managementTitleHandler(store, provider, registry, syncDependencies)
+	root.Handle("/api/sonarr/title/", titleHandler)
+	root.Handle("/api/radarr/title/", titleHandler)
+	root.Handle("/api/tmdb/title/", titleHandler)
 	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry, Version: localBuildVersion()}))
 	return root
 }
 
-func managementTitleHandler(store managementStore, provider runtime.Provider, registry *runtime.Registry) http.Handler {
+func managementTitleHandler(store managementStore, provider runtime.Provider, registry *runtime.Registry, syncDependencies titleSyncDependencies) http.Handler {
+	sonarr := syncDependencies.sonarr
+	if sonarr == nil {
+		sonarr = unavailableTitleSyncer{}
+	}
+	radarr := syncDependencies.radarr
+	if radarr == nil {
+		radarr = unavailableTitleSyncer{}
+	}
 	return title.NewHandler(title.Options{
 		Store:        store,
 		Provider:     provider,
 		Invalidate:   registry.Invalidate,
 		DeleteMarker: registry.DeleteMarker,
-		SonarrSyncer: unavailableTitleSyncer{},
-		RadarrSyncer: unavailableTitleSyncer{},
+		Admission:    syncDependencies.admission,
+		SonarrSyncer: sonarr,
+		RadarrSyncer: radarr,
 		TMDBSyncer:   unavailableTitleSyncer{},
 	})
 }

@@ -139,7 +139,7 @@ func TestTask8_rootSurfaceMeasurements(t *testing.T) {
 
 func task8RootMuxWithRegistry(store managementStore, provider runtime.Provider, registry *runtime.Registry) http.Handler {
 	root := http.NewServeMux()
-	root.Handle("/api/", managementRoutes(store, provider, registry))
+	root.Handle("/api/", managementRoutes(store, provider, registry, titleSyncDependencies{}))
 	return root
 }
 

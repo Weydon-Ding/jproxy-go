@@ -39,7 +39,7 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	markers := cache.NewTTLCache[struct{}](time.Minute, 3)
 	registry := runtime.NewRegistry(provider, results, offsets, markers)
 	multipartAccess := newTask7MultipartAccess(t)
-	handler := managementRoutesWithMultipartAccess(store, provider, registry, multipartAccess)
+	handler := managementRoutesWithMultipartAccess(store, provider, registry, multipartAccess, titleSyncDependencies{})
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 

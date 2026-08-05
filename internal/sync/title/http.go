@@ -49,6 +49,11 @@ func newRequestClient(client *http.Client, timeout time.Duration) requestClient 
 	return requestClient{client: &clone, timeout: timeout}
 }
 
+// NewRequestClient creates a bounded title-sync request client that rejects redirects.
+func NewRequestClient(client *http.Client, timeout time.Duration) requestClient {
+	return newRequestClient(client, timeout)
+}
+
 func (c requestClient) get(ctx context.Context, provider, operation string, cfg providerConfig, parts ...string) ([]byte, error) {
 	requestContext, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
