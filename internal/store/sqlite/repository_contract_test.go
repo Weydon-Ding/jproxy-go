@@ -46,6 +46,11 @@ func (sonarrRuleFake) SwitchValidStatus(context.Context, sqlite.RuleIDs, sqlite.
 	return nil
 }
 func (sonarrRuleFake) Replace(context.Context, sqlite.SonarrRuleBatch) error { return nil }
+func (sonarrRuleFake) Export(context.Context, sqlite.RuleIDs) ([]sqlite.SonarrRule, error) {
+	return nil, nil
+}
+func (sonarrRuleFake) Tokens(context.Context) ([]string, error)             { return nil, nil }
+func (sonarrRuleFake) Import(context.Context, sqlite.SonarrRuleBatch) error { return nil }
 
 func (radarrRuleFake) Get(context.Context, sqlite.RuleID) (sqlite.RadarrRule, error) {
 	return sqlite.RadarrRule{}, nil
@@ -61,6 +66,11 @@ func (radarrRuleFake) SwitchValidStatus(context.Context, sqlite.RuleIDs, sqlite.
 	return nil
 }
 func (radarrRuleFake) Replace(context.Context, sqlite.RadarrRuleBatch) error { return nil }
+func (radarrRuleFake) Export(context.Context, sqlite.RuleIDs) ([]sqlite.RadarrRule, error) {
+	return nil, nil
+}
+func (radarrRuleFake) Tokens(context.Context) ([]string, error)             { return nil, nil }
+func (radarrRuleFake) Import(context.Context, sqlite.RadarrRuleBatch) error { return nil }
 
 func (sonarrTitleFake) Get(context.Context, sqlite.SonarrTitleID) (sqlite.SonarrTitle, error) {
 	return sqlite.SonarrTitle{}, nil
