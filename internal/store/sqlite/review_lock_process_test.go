@@ -71,7 +71,7 @@ func stopLockHelper(t *testing.T, command *exec.Cmd) {
 	if command.Process == nil {
 		return
 	}
-	if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("terminate lock helper: %v", err)
 	}
 	result := make(chan error, 1)

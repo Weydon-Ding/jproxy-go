@@ -125,6 +125,9 @@ func applyMigrationsAfterHook(ctx context.Context, db *sql.DB, migrations []migr
 	if beforeCommit != nil {
 		beforeCommit(ctx)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit SQLite migrations: %w", err)
 	}
