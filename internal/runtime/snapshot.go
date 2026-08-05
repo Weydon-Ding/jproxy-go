@@ -61,11 +61,20 @@ func (p *provider) Refresh(ctx context.Context, scopes Scope) error {
 	if scopes == 0 || p.loader == nil {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("refresh runtime formatter snapshot: %w", err)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("refresh runtime formatter snapshot: %w", err)
+	}
 	loaded, err := p.loader.LoadFormatterSnapshot(ctx)
 	if err != nil {
 		return fmt.Errorf("load runtime formatter snapshot: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish runtime formatter snapshot: %w", err)
 	}
 	current := p.Snapshot()
 	next := snapshotFromSQLite(loaded, current, scopes)
