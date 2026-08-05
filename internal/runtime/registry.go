@@ -34,10 +34,11 @@ type Registry struct {
 	results  Cache
 	offsets  Cache
 	markers  Cache
+	gate     titleSyncGate
 }
 
 func NewRegistry(provider Provider, results, offsets, markers Cache) *Registry {
-	return &Registry{provider: provider, results: results, offsets: offsets, markers: markers}
+	return &Registry{provider: provider, results: results, offsets: offsets, markers: markers, gate: newTitleSyncGate()}
 }
 
 func (r *Registry) Invalidate(ctx context.Context, names ...string) error {
@@ -59,6 +60,7 @@ func (r *Registry) InvalidateAll(ctx context.Context) error {
 	r.results.Clear()
 	r.offsets.Clear()
 	r.markers.Clear()
+	r.gate.clearAll()
 	return nil
 }
 
@@ -68,6 +70,7 @@ func (r *Registry) DeleteMarker(name string) error {
 	switch name {
 	case SonarrTitleSyncInterval, TMDBTitleSyncInterval, RadarrTitleSyncInterval:
 		r.markers.Delete(name)
+		r.gate.clear(name)
 		return nil
 	default:
 		return fmt.Errorf("%q: %w", name, ErrUnknownCacheName)
@@ -77,9 +80,18 @@ func (r *Registry) DeleteMarker(name string) error {
 // DeleteSystemConfigSyncMarkers is the post-commit half of a prepared system
 // configuration publication. The snapshot has already been atomically swapped.
 func (r *Registry) DeleteSystemConfigSyncMarkers() {
-	r.markers.Delete(SonarrTitleSyncInterval)
-	r.markers.Delete(TMDBTitleSyncInterval)
-	r.markers.Delete(RadarrTitleSyncInterval)
+	for _, marker := range titleSyncMarkers {
+		r.markers.Delete(marker)
+		r.gate.clear(marker)
+	}
+}
+
+func (r *Registry) BeginTitleSync(marker string) (TitleSyncAttempt, error) {
+	return r.gate.begin(marker)
+}
+
+func (r *Registry) FinishTitleSync(attempt TitleSyncAttempt, succeeded bool) {
+	r.gate.finish(attempt, succeeded)
 }
 
 type plan struct {
@@ -134,5 +146,6 @@ func (r *Registry) apply(plan plan) {
 	}
 	for _, marker := range plan.markers {
 		r.markers.Delete(marker)
+		r.gate.clear(marker)
 	}
 }
