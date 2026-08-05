@@ -63,6 +63,12 @@ func (s *Store) FormatterSnapshot(ctx context.Context) (snapshot Snapshot, err e
 	return snapshotFromTransaction(tx, func() (Snapshot, error) { return loadSnapshot(ctx, tx) })
 }
 
+// LoadFormatterSnapshot satisfies the runtime loader contract while keeping the
+// Store open for the complete serving lifetime.
+func (s *Store) LoadFormatterSnapshot(ctx context.Context) (Snapshot, error) {
+	return s.FormatterSnapshot(ctx)
+}
+
 type snapshotTransaction interface {
 	Commit() error
 	Rollback() error
