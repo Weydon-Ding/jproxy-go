@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -36,32 +39,59 @@ func TestTask8_rootSurfaceMeasurements(t *testing.T) {
 	proxyServer := rootProxyServer(t, provider, markers)
 	mux := httptest.NewServer(task8RootMux(store, provider, proxyServer))
 	t.Cleanup(mux.Close)
+	routeCount := measuredManagementRoutes(t, mux.URL, isTodo8Route)
+	if routeCount != 10 {
+		t.Fatalf("route_count=%d", routeCount)
+	}
 
 	// When
+	beforeRows := task8DatabaseDigest(t, store)
 	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"tvdbId":7,"language":"en","title":"The Movie 2026","validStatus":1}`, http.StatusOK)
-	generated := getRoot(t, mux.URL, "/api/tmdb/title/query?tvdbId=7", http.StatusOK)
-	before := sha256.Sum256([]byte(generated))
-	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"id":1,"tvdbId":7,"tmdbId":9,"language":"en","title":"The Movie 2026","validStatus":1}`, http.StatusOK)
-	reused := getRoot(t, mux.URL, "/api/tmdb/title/query?tvdbId=7", http.StatusOK)
-	postRoot(t, mux.URL, "/api/tmdb/title/remove", `[1]`, http.StatusOK)
-	removed := getRoot(t, mux.URL, "/api/tmdb/title/query?tvdbId=7", http.StatusOK)
-	responses := []string{postRoot(t, mux.URL, "/api/sonarr/title/sync", "", http.StatusServiceUnavailable), postRoot(t, mux.URL, "/api/radarr/title/sync", "", http.StatusServiceUnavailable), postRoot(t, mux.URL, "/api/tmdb/title/sync", "", http.StatusServiceUnavailable)}
+	generatedRows, err := store.Repositories().TMDBTitles.FindByTVDBID(ctx, 7)
+	if err != nil || len(generatedRows) != 1 || generatedRows[0].TMDBID != nil {
+		t.Fatalf("generated=%+v error=%v", generatedRows, err)
+	}
+	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"id":`+strconv.FormatInt(int64(generatedRows[0].ID), 10)+`,"tvdbId":7,"tmdbId":9,"language":"en","title":"The Movie 2026","validStatus":1}`, http.StatusOK)
+	reusedRows, err := store.Repositories().TMDBTitles.FindByTVDBID(ctx, 7)
+	if err != nil || len(reusedRows) != 1 || reusedRows[0].TMDBID == nil || *reusedRows[0].TMDBID != 9 {
+		t.Fatalf("supplied=%+v error=%v", reusedRows, err)
+	}
+	beforeRemove := task8DatabaseDigest(t, store)
+	postRoot(t, mux.URL, "/api/tmdb/title/remove", `[`+strconv.FormatInt(int64(generatedRows[0].ID), 10)+`]`, http.StatusOK)
+	afterRemove := task8DatabaseDigest(t, store)
+	removedRows := int64(len(reusedRows))
+	remaining, err := store.Repositories().TMDBTitles.FindByTVDBID(ctx, 7)
+	if err != nil || len(remaining) != 0 || beforeRemove == afterRemove {
+		t.Fatalf("removed=%+v error=%v", remaining, err)
+	}
+	page := getRoot(t, mux.URL, "/api/tmdb/title/query", http.StatusOK)
+	var responseFields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(page), &responseFields); err != nil || len(responseFields) != 4 || responseFields["size"] != nil {
+		t.Fatalf("page=%s error=%v", page, err)
+	}
+	responses := make([]string, 0, 3)
+	unavailableSyncs := 0
+	beforeSync := provider.Snapshot()
+	for _, path := range []string{"/api/sonarr/title/sync", "/api/radarr/title/sync", "/api/tmdb/title/sync"} {
+		responses = append(responses, postRoot(t, mux.URL, path, "", http.StatusServiceUnavailable))
+		unavailableSyncs++
+	}
 
 	// Then
-	if before == sha256.Sum256([]byte(reused)) || generated == "" || removed == "" {
-		t.Fatal("tmdb save semantics not observed")
-	}
 	retained := 0
 	for _, name := range []string{runtime.SonarrTitleSyncInterval, runtime.RadarrTitleSyncInterval, runtime.TMDBTitleSyncInterval} {
 		if _, ok := markers.Get(name); ok {
 			retained++
 		}
 	}
-	canaryLeaks := taskCanaryLeaks(append(responses, generated, reused, removed))
-	if retained != 3 || canaryLeaks != 0 {
+	canaryBodies := []string{postRoot(t, mux.URL, "/api/tmdb/title/save", `{"tvdbId":1,"language":"task-canary-token","title":"task-canary-db-path task-canary-dsn task-canary-api-key task-canary-password task-canary-url task-canary-regex task-canary-xml task-canary-upload-name","validStatus":2}`, http.StatusBadRequest)}
+	canaryLeaks := taskCanaryLeaks(append(append(responses, page), canaryBodies...))
+	pageFieldsExact := len(responseFields) == 4 && responseFields["current"] != nil && responseFields["pageSize"] != nil && responseFields["total"] != nil && responseFields["list"] != nil
+	syncIsolated := reflect.DeepEqual(provider.Snapshot(), beforeSync)
+	if retained != 3 || canaryLeaks != 0 || !pageFieldsExact || !syncIsolated || removedRows != 1 {
 		t.Fatalf("markers=%d canary_leaks=%d", retained, canaryLeaks)
 	}
-	t.Logf("task8_qa route_count=%d page_rows_hash=%x removed_rows=%d generated_reused_semantics=%t projection_db_hash=%x unavailable_syncs=%d markers_retained=%d canary_leaks=%d", 10, before, 1, true, sha256.Sum256([]byte(reused)), 3, retained, canaryLeaks)
+	t.Logf("task8_qa route_count=%d db_rows_before=%x db_rows_after_remove=%x removed_rows=%d supplied_generated_semantics=%t page_fields_exact=%t unavailable_syncs=%d markers_retained=%d canary_leaks=%d", routeCount, beforeRows, afterRemove, removedRows, len(generatedRows) == 1 && len(reusedRows) == 1, pageFieldsExact, unavailableSyncs, retained, canaryLeaks)
 }
 
 func rootProxyServer(t *testing.T, provider runtime.Provider, markers *cache.TTLCache[struct{}]) *proxy.Server {
@@ -74,4 +104,17 @@ func task8RootMux(store managementStore, provider runtime.Provider, proxyServer 
 	root.Handle("/api/", managementRoutes(store, provider, proxyServer.CacheRegistry()))
 	root.Handle("/", proxyServer.Routes())
 	return root
+}
+
+func task8DatabaseDigest(t *testing.T, store *sqlite.Store) [32]byte {
+	t.Helper()
+	rows, err := store.Repositories().TMDBTitles.Page(context.Background(), sqlite.TMDBTitleFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(rows.List)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sha256.Sum256(data)
 }

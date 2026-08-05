@@ -48,8 +48,17 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 			}
 		})
 	}
-	if len(routes) != 35 {
-		t.Fatalf("route_count=%d", len(routes))
+	todo7Routes, todo8Routes := 0, 0
+	for _, route := range routes {
+		if isTodo7Route(route) {
+			todo7Routes++
+		}
+		if isTodo8Route(route) {
+			todo8Routes++
+		}
+	}
+	if len(routes) != 35 || todo7Routes != 25 || todo8Routes != 10 {
+		t.Fatalf("route_count=%d todo7=%d todo8=%d", len(routes), todo7Routes, todo8Routes)
 	}
 
 	wrongMethod := httptest.NewRecorder()
@@ -62,7 +71,7 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 	if unknown.Code != http.StatusNotFound {
 		t.Fatalf("unknown=%d", unknown.Code)
 	}
-	t.Logf("root_management_route_count=%d todo7_route_count=%d todo8_route_count=%d", len(routes), 25, 10)
+	t.Logf("root_management_route_count=%d todo7_route_count=%d todo8_route_count=%d", len(routes), todo7Routes, todo8Routes)
 }
 
 func rootRouteConfig(database bool) config.Config {
