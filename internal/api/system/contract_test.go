@@ -56,3 +56,15 @@ func TestHandler_reportsMethodsWithAllowAndRedactedErrors(t *testing.T) {
 		t.Fatalf("status=%d allow=%q body=%q", response.Code, response.Header().Get("Allow"), response.Body.String())
 	}
 }
+
+func TestHandler_returnsNotFoundForUnknownSystemPath(t *testing.T) {
+	store := openSeededStore(t)
+	provider := runtime.NewProvider(snapshot(t, store), store)
+	handler := system.NewHandler(system.Options{Store: store, Provider: provider, Registry: runtime.NewRegistry(provider, cache.NewTTLCache[string](0, 1), cache.NewTTLCache[[]int](0, 1), cache.NewTTLCache[struct{}](0, 3))})
+	request := httptest.NewRequest(http.MethodGet, "/api/system/config/unknown", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || response.Header().Get("Allow") != "" {
+		t.Fatalf("status=%d allow=%q", response.Code, response.Header().Get("Allow"))
+	}
+}

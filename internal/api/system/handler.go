@@ -54,8 +54,8 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	case http.MethodPost + " /api/system/cache/clear":
 		h.clear(writer, request)
 	default:
-		if isSystemPath(request.URL.Path) {
-			writer.Header().Set("Allow", allowedMethod(request.URL.Path))
+		if method := allowedMethod(request.URL.Path); method != "" {
+			writer.Header().Set("Allow", method)
 			writeError(writer, http.StatusMethodNotAllowed)
 			return
 		}
@@ -63,13 +63,14 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func isSystemPath(path string) bool { return len(path) >= 12 && path[:12] == "/api/system/" }
-
 func allowedMethod(path string) string {
 	if path == "/api/system/config/version" || path == "/api/system/config/query" || path == "/api/system/config/author/list" {
 		return http.MethodGet
 	}
-	return http.MethodPost
+	if path == "/api/system/config/update" || path == "/api/system/cache/clearAll" || path == "/api/system/cache/clear" {
+		return http.MethodPost
+	}
+	return ""
 }
 
 func (h *Handler) version(writer http.ResponseWriter) {
