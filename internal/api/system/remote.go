@@ -35,7 +35,7 @@ func (h *Handler) authorList(ctx context.Context) []string {
 
 func fetchAuthors(ctx context.Context, source string) ([]string, bool) {
 	var authors []string
-	if !fetchJSON(ctx, source, &authors) || len(authors) == 0 {
+	if !fetchJSON(ctx, source, &authors, true) || len(authors) == 0 {
 		return nil, false
 	}
 	for _, author := range authors {
@@ -50,13 +50,13 @@ func fetchVersion(ctx context.Context, source string) (string, bool) {
 	var payload struct {
 		TagName string `json:"tag_name"`
 	}
-	if !fetchJSON(ctx, source, &payload) || strings.TrimSpace(payload.TagName) == "" {
+	if !fetchJSON(ctx, source, &payload, false) || strings.TrimSpace(payload.TagName) == "" {
 		return "", false
 	}
 	return strings.TrimPrefix(payload.TagName, "v"), true
 }
 
-func fetchJSON(ctx context.Context, source string, target any) bool {
+func fetchJSON(ctx context.Context, source string, target any, strictSchema bool) bool {
 	if source == "" {
 		return false
 	}
@@ -80,6 +80,8 @@ func fetchJSON(ctx context.Context, source string, target any) bool {
 		return false
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
-	decoder.DisallowUnknownFields()
+	if strictSchema {
+		decoder.DisallowUnknownFields()
+	}
 	return decoder.Decode(target) == nil && decoder.Decode(&struct{}{}) == io.EOF
 }

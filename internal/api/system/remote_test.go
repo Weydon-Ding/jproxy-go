@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,19 @@ import (
 	"testing"
 	"time"
 )
+
+func TestVersion_acceptsRealisticGitHubReleaseSchema(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"url":"https://api.github.test/releases/1","assets_url":"https://api.github.test/assets","author":{"login":"octocat"},"id":1,"tag_name":"v9.9.9","assets":[],"prerelease":false}`)
+	}))
+	defer server.Close()
+	handler := NewHandler(Options{Version: "1.0.0", VersionURL: server.URL})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/system/config/version", nil))
+	if response.Code != http.StatusOK || response.Body.String() != "1.0.0 🚨" {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+}
 
 func TestRemoteDefaults_matchJavaProductionResources(t *testing.T) {
 	if defaultVersionURL != "https://api.github.com/repos/LuckyPuppy514/jproxy/releases/latest" || defaultAuthorURL != "https://raw.githubusercontent.com/LuckyPuppy514/jproxy/main/src/main/resources/rule/author.json" || defaultAuthorBackupURL != "https://github.rn.lckp.top/LuckyPuppy514/jproxy/main/src/main/resources/rule/author.json" {
@@ -23,7 +37,8 @@ func TestFetchJSON_rejectsRemoteBoundaryResponses(t *testing.T) {
 		status     int
 	}{
 		{"oversized_trailing_whitespace", overLimit, http.StatusOK}, {"misleading_200", `{"tag_name":""}`, http.StatusOK},
-		{"unknown_field", `{"tag_name":"v1","extra":true}`, http.StatusOK}, {"second_value", `{"tag_name":"v1"} {}`, http.StatusOK},
+		{"missing_tag", `{}`, http.StatusOK}, {"blank_tag", `{"tag_name":" "}`, http.StatusOK},
+		{"non_string_tag", `{"tag_name":1}`, http.StatusOK}, {"second_value", `{"tag_name":"v1"} {}`, http.StatusOK},
 		{"non_2xx", `{"tag_name":"v1"}`, http.StatusBadGateway},
 	}
 	for _, testCase := range cases {
@@ -80,6 +95,22 @@ func TestAuthorList_retriesPrimaryThenBackupOnEveryRequest(t *testing.T) {
 		t.Fatalf("primary=%d backup=%d", primaryHits.Load(), backupHits.Load())
 	}
 	t.Logf("task6_remote_fallback primary=%d backup=%d default=false", primaryHits.Load(), backupHits.Load())
+}
+
+func TestAuthorList_rejectsUnknownFieldsBeforeUsingBackup(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `["primary"] {}`)
+	}))
+	backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `["backup"]`)
+	}))
+	defer primary.Close()
+	defer backup.Close()
+
+	authors := NewHandler(Options{AuthorURL: primary.URL, AuthorBackupURL: backup.URL}).authorList(context.Background())
+	if len(authors) != 1 || authors[0] != "backup" {
+		t.Fatalf("authors=%q", authors)
+	}
 }
 
 func TestAuthorList_returnsDefaultAfterBothSourcesFail(t *testing.T) {
