@@ -62,6 +62,14 @@ func (r *Registry) InvalidateAll(ctx context.Context) error {
 	return nil
 }
 
+// DeleteSystemConfigSyncMarkers is the post-commit half of a prepared system
+// configuration publication. The snapshot has already been atomically swapped.
+func (r *Registry) DeleteSystemConfigSyncMarkers() {
+	r.markers.Delete(SonarrTitleSyncInterval)
+	r.markers.Delete(TMDBTitleSyncInterval)
+	r.markers.Delete(RadarrTitleSyncInterval)
+}
+
 type plan struct {
 	scopes       Scope
 	clearResults bool

@@ -108,6 +108,14 @@ func (p *provider) Refresh(ctx context.Context, scopes Scope) error {
 	return nil
 }
 
+func (p *provider) publishPrepared(source sqlite.Snapshot) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	current := p.Snapshot()
+	next := snapshotFromSQLite(source, current, ScopeSystemConfig)
+	p.value.Store(&next)
+}
+
 func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope) Snapshot {
 	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision}
 	if scopes == allScopes {
