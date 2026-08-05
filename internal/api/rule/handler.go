@@ -52,18 +52,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST /sync":
 		h.sync(w, r)
 	default:
-		allow := ""
-		if path == "/query" || path == "/token/list" {
-			allow = "GET"
-		}
-		if strings.Contains("/sync /save /remove /enable /disable /export /import", path) {
-			allow = "POST"
-		}
+		allow := allowedMethod(path)
 		if allow != "" {
 			w.Header().Set("Allow", allow)
 			writeError(w, 405)
 			return
 		}
 		http.NotFound(w, r)
+	}
+}
+
+func allowedMethod(path string) string {
+	switch path {
+	case "/query", "/token/list":
+		return http.MethodGet
+	case "/sync", "/save", "/remove", "/enable", "/disable", "/export", "/import":
+		return http.MethodPost
+	default:
+		return ""
 	}
 }
