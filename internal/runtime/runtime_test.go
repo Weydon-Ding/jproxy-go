@@ -12,9 +12,11 @@ import (
 type testLoader struct {
 	snapshot sqlite.Snapshot
 	err      error
+	loads    int
 }
 
 func (l *testLoader) LoadFormatterSnapshot(context.Context) (sqlite.Snapshot, error) {
+	l.loads++
 	return l.snapshot, l.err
 }
 
