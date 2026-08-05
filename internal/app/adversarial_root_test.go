@@ -21,7 +21,7 @@ import (
 )
 
 func TestRootMux_rejectsPrimaryRuleIDWithoutPartialWrites(t *testing.T) {
-	store, handler, _ := adversarialRoot(t, false)
+	store, handler, _ := adversarialRoot(t)
 	const primary = "00000000000000000000000000000000"
 	for _, request := range []*http.Request{
 		httptest.NewRequest(http.MethodPost, "/api/sonarr/rule/save", strings.NewReader(`{"id":"`+primary+`","token":"title","regex":".*","replacement":"x","example":"x"}`)),
@@ -44,7 +44,7 @@ func TestRootMux_rejectsPrimaryRuleIDWithoutPartialWrites(t *testing.T) {
 }
 
 func TestRootMux_rejectsMalformedRuleMultipartWithoutWrites(t *testing.T) {
-	store, handler, _ := adversarialRoot(t, false)
+	store, handler, _ := adversarialRoot(t)
 	valid := `[{"id":"r1","token":"title","regex":".*","replacement":"x","example":"x"}]`
 	cases := []*http.Request{
 		multipartRuleRequest(t, valid, "rules.json", "other"),
@@ -75,8 +75,30 @@ func TestRootMux_rejectsMalformedRuleMultipartWithoutWrites(t *testing.T) {
 	t.Logf("task7_adversarial multipart_cases=%d oversized_rejected=%t filesystem_access=false", len(cases)+1, response.Code == http.StatusBadRequest)
 }
 
+func TestRootMux_rejectsOversizedAndPartiallyInvalidRuleImportsWithoutWrites(t *testing.T) {
+	store, handler, _ := adversarialRoot(t)
+	rows := make([]string, 201)
+	for index := range rows {
+		rows[index] = `{"id":"rule-` + string(rune('a'+index%26)) + `","token":"title","regex":".*","replacement":"x","example":"x"}`
+	}
+	requests := []*http.Request{
+		multipartRuleRequest(t, `[{"id":"first","token":"title","regex":".*","replacement":"x","example":"x"},{"id":"invalid","token":"title","regex":"[","replacement":"x","example":"x"}]`, "rules.json", "file"),
+		multipartRuleRequest(t, "["+strings.Join(rows, ",")+"]", "rules.json", "file"),
+		httptest.NewRequest(http.MethodPost, "/api/sonarr/rule/import", strings.NewReader("--mismatch--\r\n")).WithContext(context.Background()),
+	}
+	requests[2].Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	for _, request := range requests {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest || ruleTotal(t, store) != 0 {
+			t.Fatalf("status=%d rows=%d", response.Code, ruleTotal(t, store))
+		}
+	}
+	t.Logf("task7_adversarial invalid_middle_atomic=%t batch_limit_rejected=%t malformed_boundary_rejected=%t", true, true, true)
+}
+
 func TestRootMux_ruleCancellationAndRefreshFailureAreObservable(t *testing.T) {
-	store, handler, provider := adversarialRoot(t, true)
+	store, handler, provider := adversarialRoot(t)
 	before := provider.Snapshot()
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -102,7 +124,7 @@ func TestRootMux_ruleCancellationAndRefreshFailureAreObservable(t *testing.T) {
 }
 
 func TestRootMux_titlePagesTMDBReuseAndUnavailableSyncAreIsolated(t *testing.T) {
-	store, handler, provider := adversarialRoot(t, false)
+	store, handler, provider := adversarialRoot(t)
 	for _, body := range []string{
 		`{"id":10,"tvdbId":7,"tmdbId":91,"language":"en","title":"First","validStatus":1}`,
 		`{"tvdbId":7,"language":"en","title":"Second","validStatus":1}`,
@@ -156,7 +178,7 @@ func (p *controllableProvider) Refresh(ctx context.Context, scope runtime.Scope)
 	return p.Provider.Refresh(ctx, scope)
 }
 
-func adversarialRoot(t *testing.T, controllable bool) (*sqlite.Store, http.Handler, *controllableProvider) {
+func adversarialRoot(t *testing.T) (*sqlite.Store, http.Handler, *controllableProvider) {
 	t.Helper()
 	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "adversarial.db"))
 	if err != nil {
