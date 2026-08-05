@@ -7,17 +7,19 @@ import (
 )
 
 type Repositories struct {
-	SystemConfigs SystemConfigRepository
-	SystemUsers   SystemUserRepository
-	SonarrRules   SonarrRuleRepository
-	RadarrRules   RadarrRuleRepository
-	SonarrTitles  SonarrTitleRepository
-	RadarrTitles  RadarrTitleRepository
-	TMDBTitles    TMDBTitleRepository
+	SystemConfigs  SystemConfigRepository
+	SystemUsers    SystemUserRepository
+	SonarrRules    SonarrRuleRepository
+	RadarrRules    RadarrRuleRepository
+	SonarrTitles   SonarrTitleRepository
+	RadarrTitles   RadarrTitleRepository
+	TMDBTitles     TMDBTitleRepository
+	SonarrExamples SonarrExampleRepository
+	RadarrExamples RadarrExampleRepository
 }
 
 func (s *Store) Repositories() Repositories {
-	return Repositories{systemConfigRepo{s.db, s}, systemUserRepo{s.db}, sonarrRuleRepo{s.db, s}, radarrRuleRepo{s.db, s}, sonarrTitleRepo{s.db, s}, radarrTitleRepo{db: s.db, store: s}, tmdbTitleRepo{s.db, s}}
+	return Repositories{systemConfigRepo{s.db, s}, systemUserRepo{s.db}, sonarrRuleRepo{s.db, s}, radarrRuleRepo{s.db, s}, sonarrTitleRepo{s.db, s}, radarrTitleRepo{db: s.db, store: s}, tmdbTitleRepo{s.db, s}, sonarrExampleRepo{s.db, s}, radarrExampleRepo{s.db, s}}
 }
 
 type systemConfigRepo struct {
@@ -42,6 +44,14 @@ type radarrTitleRepo struct {
 	store *Store
 }
 type tmdbTitleRepo struct {
+	db    *sql.DB
+	store *Store
+}
+type sonarrExampleRepo struct {
+	db    *sql.DB
+	store *Store
+}
+type radarrExampleRepo struct {
 	db    *sql.DB
 	store *Store
 }

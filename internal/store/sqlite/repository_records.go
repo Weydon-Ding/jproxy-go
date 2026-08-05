@@ -27,6 +27,14 @@ type SonarrRule struct {
 	CreateTime, UpdateTime *string
 }
 type RadarrRule SonarrRule
+type SonarrExample struct {
+	Hash                   string
+	OriginalText           string
+	FormatText             *string
+	ValidStatus            ValidStatus
+	CreateTime, UpdateTime *string
+}
+type RadarrExample SonarrExample
 type SonarrTitle struct {
 	ID                     SonarrTitleID
 	TVDBID, SNO            int64

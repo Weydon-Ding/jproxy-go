@@ -25,6 +25,10 @@ type RuleFilter struct {
 	Page          PageInput
 	Token, Remark *string
 }
+type ExampleFilter struct {
+	Page         PageInput
+	OriginalText *string
+}
 type SonarrTitleFilter struct {
 	Page   PageInput
 	Title  *string
@@ -45,6 +49,11 @@ func (f RuleFilter) normalized() RuleFilter {
 	f.Page = f.Page.normalized()
 	f.Token = trimFilter(f.Token)
 	f.Remark = trimFilter(f.Remark)
+	return f
+}
+func (f ExampleFilter) normalized() ExampleFilter {
+	f.Page = f.Page.normalized()
+	f.OriginalText = trimFilter(f.OriginalText)
 	return f
 }
 func (f SonarrTitleFilter) normalized() SonarrTitleFilter {

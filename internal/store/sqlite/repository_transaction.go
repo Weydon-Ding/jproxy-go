@@ -29,6 +29,12 @@ type DatasetTransaction interface {
 	UpsertTMDBTitles(context.Context, TMDBTitleBatch) error
 	DeleteTMDBTitles(context.Context, TMDBTitleIDs) error
 	ReplaceTMDBTitles(context.Context, TMDBTitleBatch) error
+	UpsertSonarrExamples(context.Context, SonarrExampleBatch) error
+	DeleteSonarrExamples(context.Context, ExampleIDs) error
+	ReplaceSonarrExamples(context.Context, SonarrExampleBatch) error
+	UpsertRadarrExamples(context.Context, RadarrExampleBatch) error
+	DeleteRadarrExamples(context.Context, ExampleIDs) error
+	ReplaceRadarrExamples(context.Context, RadarrExampleBatch) error
 }
 
 type datasetTransaction struct{ tx *sql.Tx }

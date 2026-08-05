@@ -34,6 +34,20 @@ type RadarrRuleRepository interface {
 	SwitchValidStatus(context.Context, RuleIDs, ValidStatus) error
 	Replace(context.Context, RadarrRuleBatch) error
 }
+type SonarrExampleRepository interface {
+	Page(context.Context, ExampleFilter) (PageResult[SonarrExample], error)
+	List(context.Context, ExampleFilter) ([]SonarrExample, error)
+	UpsertBatch(context.Context, SonarrExampleBatch) error
+	DeleteBatch(context.Context, ExampleIDs) error
+	Replace(context.Context, SonarrExampleBatch) error
+}
+type RadarrExampleRepository interface {
+	Page(context.Context, ExampleFilter) (PageResult[RadarrExample], error)
+	List(context.Context, ExampleFilter) ([]RadarrExample, error)
+	UpsertBatch(context.Context, RadarrExampleBatch) error
+	DeleteBatch(context.Context, ExampleIDs) error
+	Replace(context.Context, RadarrExampleBatch) error
+}
 type SonarrTitleRepository interface {
 	Get(context.Context, SonarrTitleID) (SonarrTitle, error)
 	Upsert(context.Context, SonarrTitle) error

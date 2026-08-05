@@ -67,6 +67,9 @@ type TMDBTitleIDs struct{ IDs []TMDBTitleID }
 type SonarrRuleBatch struct{ Rows []SonarrRule }
 type RadarrRuleBatch struct{ Rows []RadarrRule }
 type RuleIDs struct{ IDs []RuleID }
+type SonarrExampleBatch struct{ Rows []SonarrExample }
+type RadarrExampleBatch struct{ Rows []RadarrExample }
+type ExampleIDs struct{ IDs []string }
 
 func javaInteger(value int64) error {
 	if value < -2147483648 || value > 2147483647 {
