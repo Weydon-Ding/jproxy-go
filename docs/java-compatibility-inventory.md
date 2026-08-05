@@ -72,13 +72,13 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `RadarrExampleController` | `POST /api/radarr/example/save` | `save` | Implemented in Go | DB mode only. |
 | `RadarrExampleController` | `GET /api/radarr/example/query` | `query` | Implemented in Go | DB mode only; deterministic ordering. |
 | `RadarrExampleController` | `POST /api/radarr/example/remove` | `remove` | Implemented in Go | DB mode only. |
-| `SonarrTitleController` | `POST /api/sonarr/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `SonarrTitleController` | `POST /api/sonarr/title/sync` | `sync` | Implemented in Go | DB mode only; dynamic SQLite configuration, redirect rejection, atomic stale-row replacement, and shared admission gate. |
 | `SonarrTitleController` | `GET /api/sonarr/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse. |
 | `SonarrTitleController` | `POST /api/sonarr/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
-| `RadarrTitleController` | `POST /api/radarr/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `RadarrTitleController` | `POST /api/radarr/title/sync` | `sync` | Implemented in Go | DB mode only; dynamic SQLite configuration, redirect rejection, atomic stale-row replacement, and shared admission gate. |
 | `RadarrTitleController` | `GET /api/radarr/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse. |
 | `RadarrTitleController` | `POST /api/radarr/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
-| `TmdbTitleController` | `POST /api/tmdb/title/sync` | `sync` | Implemented in Go | DB mode only; HTTP contract implemented, real sync deferred to Todo9/10, production returns 503 until adapter installed. |
+| `TmdbTitleController` | `POST /api/tmdb/title/sync` | `sync` | Implemented in Go | DB mode only; intentionally returns 503 until Todo10. |
 | `TmdbTitleController` | `GET /api/tmdb/title/query` | `query` | Implemented in Go | DB mode only; deterministic PageResponse and no-write clean-title projection. |
 | `TmdbTitleController` | `POST /api/tmdb/title/remove` | `remove` | Implemented in Go | DB mode only; exact runtime invalidation. |
 | `TmdbTitleController` | `POST /api/tmdb/title/save` | `save` | Implemented in Go | DB mode only; supplied, generated and reused `tmdbId` semantics. |
@@ -95,8 +95,8 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `SystemCacheServiceImpl` | named cache clear and clear-all | Implemented in Go | DB-only management surface; token auth caches remain unavailable until Todo 11. |
 | `SonarrRuleServiceImpl` / `RadarrRuleServiceImpl` | rule query/page/sync/validity switch | Implemented in Go | CRUD and validity switch are DB-mode routes with deterministic ordering. HTTP sync contract is implemented but real sync is deferred to Todo9/10 and returns 503 until an adapter is installed. |
 | `SonarrExampleServiceImpl` / `RadarrExampleServiceImpl` | example CRUD and formatter examples | Implemented in Go | DB-mode CRUD and deterministic formatter projection; bounded input differs from Java's unbounded acceptance. |
-| `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Implemented in Go | Persisted query/remove APIs are DB-mode routes with deterministic pages; HTTP sync returns 503 until Todo9 installs a real adapter. |
-| `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; HTTP sync returns 503 until Todo10 installs a real adapter. |
+| `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Implemented in Go | DB-mode sync rereads persisted configuration every request and atomically removes stale rows. Atomic replacement intentionally differs from Java upsert-only sync. |
+| `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; sync returns 503 until Todo10 installs a real adapter. |
 | `SystemUserServiceImpl` | password check, JWT sign/verify/logout, user retrieval/update | Pending migration | Todo 11. |
 | `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Pending migration | Todo 13. |
 | `TransmissionServiceImpl` | RPC login/session, torrent rename | Pending migration | Todo 14 must implement protocol-correct behavior rather than Java placeholders. |

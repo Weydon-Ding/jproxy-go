@@ -248,6 +248,7 @@ go build ./cmd/jproxy
 ## Migration note
 
 This README documents the v0.1.0 MVP plus opt-in Radarr and Sonarr formatters.
-The original Java JProxy UI, login, title synchronization, remote rule features,
-and runtime database reload remain out of scope. SQLite writes here are limited
-to the owned migration lifecycle described above.
+The original Java JProxy UI, login, remote rule features, and runtime database
+reload remain out of scope. DB-mode Sonarr/Radarr title sync is available through
+the management API; TMDB sync remains deferred to Todo10. SQLite writes here are
+limited to the owned migration lifecycle described above.

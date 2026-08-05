@@ -32,9 +32,10 @@ Implemented:
   reload the file.
 - In DB mode only, the root mux mounts six unauthenticated-until-Todo-11 system
   configuration/cache routes, Todo7 rule/example routes, and Todo8 title routes
-  before the proxy fallback. Environment mode has no management routes. Rule and
-  title sync HTTP contracts currently return 503 through local unavailable
-  adapters; remote sync is deferred to Todo9/10. Config updates accept exactly the fixed Java-compatible
+  before the proxy fallback. Environment mode has no management routes. In DB
+  mode Sonarr/Radarr title sync uses dynamic SQLite configuration, atomic replace
+  services, no-redirect HTTP requests, and the shared title-sync admission gate.
+  TMDB sync intentionally remains unavailable until Todo10. Config updates accept exactly the fixed Java-compatible
   active ID/key set, reject malformed JSON and invalid values with a redacted
   400, validate only local structure (including Go RE2 compilation), commit the
   SQLite rows and formatter snapshot together, then publish that prepared
@@ -44,7 +45,9 @@ Implemented:
   dependencies, `jackettUrl` and `prowlarrUrl`, in that same immutable request
   snapshot. The next proxy request uses both new values; formatter and
   result-cache revisions advance together. Other persisted service settings
-  remain future-Todo data and do not construct clients yet. Sonarr templates
+  remain future-Todo data and do not construct clients yet. A successful config
+  update clears retained sync gate state, so the next sync rereads current URL,
+  key, and regex from SQLite without publishing secrets in runtime snapshots. Sonarr templates
   require `{title}`, `{season}`, and `{episode}`; Radarr templates require
   `{title}` and `{year}`, matching Java `CheckUtil`. Language and author strings
   retain Java-compatible values except for the global string-size and
@@ -61,6 +64,11 @@ Implemented:
   `system_config`, rules, and titles become the all-or-nothing payload for both
   formatters. Payload environment variables are ignored, while the Radarr and
   Sonarr `*_FORMAT_ENABLED` variables continue to control route execution.
+
+Intentional difference: successful title sync atomically replaces a domain's
+rows and deletes stale rows, rather than preserving Java's upsert-only behavior.
+If runtime refresh fails after a database commit, the rows remain committed and
+the retained success gate prevents a duplicate replace until explicit invalidation.
 
 Next:
 
