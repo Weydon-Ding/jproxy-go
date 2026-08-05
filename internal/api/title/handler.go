@@ -25,11 +25,17 @@ type Syncer interface {
 	Sync(context.Context) (SyncResult, error)
 }
 
+type SyncAdmission interface {
+	BeginTitleSync(string) (runtime.TitleSyncAttempt, error)
+	FinishTitleSync(runtime.TitleSyncAttempt, bool)
+}
+
 type Options struct {
 	Store        Store
 	Provider     runtime.Provider
 	Invalidate   func(context.Context, ...string) error
 	DeleteMarker func(string) error
+	Admission    SyncAdmission
 	SonarrSyncer Syncer
 	RadarrSyncer Syncer
 	TMDBSyncer   Syncer
