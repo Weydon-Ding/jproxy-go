@@ -38,8 +38,8 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	offsets := cache.NewTTLCache[[]int](time.Minute, 4)
 	markers := cache.NewTTLCache[struct{}](time.Minute, 3)
 	registry := runtime.NewRegistry(provider, results, offsets, markers)
-	multipartObservation := &task7MultipartObservation{}
-	handler := managementRoutesWithMultipartObserver(store, provider, registry, multipartObservation)
+	multipartAccess := newTask7MultipartAccess(t)
+	handler := managementRoutesWithMultipartAccess(store, provider, registry, multipartAccess)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
@@ -80,8 +80,9 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	for _, canary := range taskCanaries() {
 		canaryBodies = append(canaryBodies, postRoot(t, server.URL, "/api/sonarr/rule/save", `{"id":"00000000000000000000000000000000","token":"title","regex":".*","replacement":"`+canary+`","example":"x"}`, http.StatusBadRequest))
 	}
-	filesystemBodies := make([]string, 0, 5)
-	for _, filename := range []string{"../traverse.json", `C:\absolute.json`, `\\host\share.json`, "bad\x00.json", strings.Repeat("x", 256)} {
+	multipartAccess.assertAbsent(t)
+	filesystemBodies := make([]string, 0, len(multipartAccess.filenames))
+	for _, filename := range multipartAccess.filenames {
 		filesystemBodies = append(filesystemBodies, task7ImportNamed(t, server.URL, `[{"id":"fs","token":"title","regex":".*","replacement":"x","example":"x"}]`, filename))
 	}
 	multipartCases := 0
@@ -121,8 +122,7 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	_ = oversizedResponse.Body.Close()
 	multipartCases++
 	multipartCases += len(filesystemBodies)
-	filesystemOperations := multipartObservation.filesystemOperations
-	filesystemUnchanged := filesystemOperations == 0
+	filesystemTargetsChecked, filesystemOperations := multipartAccess.assertUnchanged(t)
 	beforeCancel := task7DatabaseDigest(t, store)
 	beforeCancelSnapshot := provider.Snapshot()
 	results.Set("result", "value")
@@ -160,7 +160,7 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	// Then
 	importAtomic := beforeProjection == afterImport
 	projectionUnchanged := beforeProjection == afterProjection
-	if !importAtomic || !projectionUnchanged || !filesystemUnchanged || filesystemOperations != 0 || multipartCases != 13 || !strings.Contains(projection, "example-a") || primaryRejections != len(primaryBodies) || unavailableSyncs != len(syncBodies) || invalidImport == "" {
+	if !importAtomic || !projectionUnchanged || filesystemTargetsChecked != len(multipartAccess.filenames) || filesystemOperations != 0 || multipartCases != 13 || !strings.Contains(projection, "example-a") || primaryRejections != len(primaryBodies) || unavailableSyncs != len(syncBodies) || invalidImport == "" {
 		t.Fatalf("projection/import/sync contract failed")
 	}
 	httpLeaks := taskCanaryLeaks(append(append(append(primaryBodies, syncBodies...), append(canaryBodies, projection, invalidImport)...), filesystemBodies...))
@@ -170,17 +170,8 @@ func TestTask7_rootSurfaceMeasurements(t *testing.T) {
 	if canaryLeaks != 0 {
 		t.Fatalf("canary_leaks=%d", canaryLeaks)
 	}
-	t.Logf("task7_qa route_count=%d db_rows_hash=%x example_projection_hash=%x primary_rejections=%d import_atomic=%t projection_db_hash_unchanged=%t unavailable_syncs=%d multipart_cases=%d part_reads=%d filesystem_operations=%d cancel_rollback=%t cancel_retry=%t refresh_failure_retained=%t refresh_count=%d http_leaks=%d error_leaks=%d log_leaks=%d canary_leaks=%d", routeCount, beforeProjection, sha256.Sum256([]byte(projection)), primaryRejections, importAtomic, projectionUnchanged, unavailableSyncs, multipartCases, multipartObservation.partReads, filesystemOperations, cancelRollback, cancelRetry, refreshFailureRetained, provider.refreshes.Load(), httpLeaks, errorLeaks, logLeaks, canaryLeaks)
+	t.Logf("task7_qa route_count=%d db_rows_hash=%x example_projection_hash=%x primary_rejections=%d import_atomic=%t projection_db_hash_unchanged=%t unavailable_syncs=%d multipart_cases=%d part_reads=%d filesystem_targets_checked=%d filesystem_operations=%d cancel_rollback=%t cancel_retry=%t refresh_failure_retained=%t refresh_count=%d http_leaks=%d error_leaks=%d log_leaks=%d canary_leaks=%d", routeCount, beforeProjection, sha256.Sum256([]byte(projection)), primaryRejections, importAtomic, projectionUnchanged, unavailableSyncs, multipartCases, multipartAccess.partReads, filesystemTargetsChecked, filesystemOperations, cancelRollback, cancelRetry, refreshFailureRetained, provider.refreshes.Load(), httpLeaks, errorLeaks, logLeaks, canaryLeaks)
 }
-
-type task7MultipartObservation struct {
-	partReads            int
-	filesystemOperations int
-}
-
-func (o *task7MultipartObservation) ObservePartRead() { o.partReads++ }
-
-func (o *task7MultipartObservation) ObserveFilesystemOperation() { o.filesystemOperations++ }
 
 func task7MultipartRequest(t *testing.T, base, payload, filename string, names ...string) *http.Request {
 	t.Helper()

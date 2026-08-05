@@ -26,14 +26,14 @@ func (unavailableTitleSyncer) Sync(context.Context) (title.SyncResult, error) {
 }
 
 func managementRoutes(store managementStore, provider runtime.Provider, registry *runtime.Registry) http.Handler {
-	return managementRoutesWithMultipartObserver(store, provider, registry, nil)
+	return managementRoutesWithMultipartAccess(store, provider, registry, nil)
 }
 
-func managementRoutesWithMultipartObserver(store managementStore, provider runtime.Provider, registry *runtime.Registry, multipartObserver rule.MultipartObserver) http.Handler {
+func managementRoutesWithMultipartAccess(store managementStore, provider runtime.Provider, registry *runtime.Registry, multipartAccess rule.MultipartAccess) http.Handler {
 	root := http.NewServeMux()
 	ruleOptions := func(domain string) rule.Options {
 		return rule.Options{
-			Store: store, Domain: domain, Syncer: unavailableRuleSyncer{}, MultipartObserver: multipartObserver,
+			Store: store, Domain: domain, Syncer: unavailableRuleSyncer{}, MultipartAccess: multipartAccess,
 			Invalidate: func(ctx context.Context, name string) error { return registry.Invalidate(ctx, name) },
 		}
 	}
