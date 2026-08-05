@@ -49,6 +49,39 @@ func TestRootMux_titleQueriesPageFilterAndRemainSideEffectFree(t *testing.T) {
 	t.Logf("task8_adversarial title_page_defaults_filters_order=%t clean_title_query_side_effect_free=%t", true, true)
 }
 
+func TestRootMux_titleQueriesIgnoreBlankAndTrimPaddedFilters(t *testing.T) {
+	store, handler, _, _, _, _ := titleAdversarialRoot(t)
+	ctx := context.Background()
+	clean := "alpha"
+	if err := store.Repositories().SonarrTitles.Upsert(ctx, sqlite.SonarrTitle{ID: 1, TVDBID: 1, MainTitle: "Alpha", Title: "Alpha Sonarr", CleanTitle: &clean, SeasonNumber: 1, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Repositories().RadarrTitles.Upsert(ctx, sqlite.RadarrTitle{ID: 1, TMDBID: 1, MainTitle: "Alpha", Title: "Alpha Radarr", CleanTitle: clean, Year: 2026, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Repositories().TMDBTitles.Upsert(ctx, sqlite.TMDBTitle{ID: 1, TVDBID: 1, Language: "en", Title: "Alpha TMDB", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"/api/sonarr/title/query?title=%20%20",
+		"/api/radarr/title/query?title=%20%20",
+		"/api/tmdb/title/query?title=%20%20",
+	} {
+		if page := titlePage(t, handler, path); page.Total != 1 {
+			t.Fatalf("blank filter %s total=%d", path, page.Total)
+		}
+	}
+	for _, path := range []string{
+		"/api/sonarr/title/query?title=%20Alpha%20",
+		"/api/radarr/title/query?title=%20Alpha%20",
+		"/api/tmdb/title/query?title=%20Alpha%20",
+	} {
+		if page := titlePage(t, handler, path); page.Total != 1 {
+			t.Fatalf("padded filter %s total=%d", path, page.Total)
+		}
+	}
+}
+
 func TestRootMux_titleRemovalsInvalidateOnlyTheirRuntimeDomains(t *testing.T) {
 	store, handler, provider, results, offsets, markers := titleAdversarialRoot(t)
 	ctx := context.Background()

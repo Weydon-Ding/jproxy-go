@@ -63,6 +63,32 @@ func TestHandler_rejectsUnknownAndRepeatedQueryParameters(t *testing.T) {
 	}
 }
 
+func TestParseQuery_trimsTitleAndOmitsBlankFilter(t *testing.T) {
+	for _, testCase := range []struct {
+		path      string
+		wantTitle *string
+	}{
+		{path: "/api/sonarr/title/query?title=%20%20"},
+		{path: "/api/sonarr/title/query?title=%20Needle%20", wantTitle: stringPointer("Needle")},
+	} {
+		input, err := parseQuery(httptest.NewRequest(http.MethodGet, testCase.path, nil), "tvdbId")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if testCase.wantTitle == nil {
+			if input.title != nil {
+				t.Fatalf("title=%q, want nil", *input.title)
+			}
+			continue
+		}
+		if input.title == nil || *input.title != *testCase.wantTitle {
+			t.Fatalf("title=%v, want %q", input.title, *testCase.wantTitle)
+		}
+	}
+}
+
+func stringPointer(value string) *string { return &value }
+
 func TestHandler_savesTMDBTitleCleansQueryProjectionAndInvalidates(t *testing.T) {
 	store := newStore(t)
 	invalidator := &recordingInvalidator{}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"jproxy-go/internal/format"
 	"jproxy-go/internal/store/sqlite"
@@ -89,8 +90,8 @@ func parseQuery(request *http.Request, idKey string) (queryInput, error) {
 		return queryInput{}, err
 	}
 	input := queryInput{page: sqlite.PageInput{Current: current, Size: size}}
-	if title, ok := values["title"]; ok {
-		input.title = &title[0]
+	if title := strings.TrimSpace(values.Get("title")); title != "" {
+		input.title = &title
 	}
 	if raw, ok := values[idKey]; ok {
 		id, err := parseInteger(raw[0])
