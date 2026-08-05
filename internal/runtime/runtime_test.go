@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -65,6 +66,67 @@ func TestRegistryInvalidate_keepsLastKnownGood_andHasNoPartialEffects_whenRefres
 	}
 }
 
+type canaryRefreshCause struct {
+	values []string
+}
+
+func (e *canaryRefreshCause) Error() string { return strings.Join(e.values, " ") }
+
+func (e *canaryRefreshCause) Format(state fmt.State, verb rune) {
+	_, _ = fmt.Fprintf(state, "%%%c:%s", verb, e.Error())
+}
+
+func TestProviderRefresh_errorGraphDoesNotExposeRawCauseOrCanaries(t *testing.T) {
+	// Given
+	canaries := []string{
+		`C:\private\jproxy.db`,
+		`file:C:/private/jproxy.db?mode=rw&_pragma=busy_timeout(5000)`,
+		`apikey=secret-api-key`,
+		`token=secret-token`,
+		`password=secret-password`,
+		`regex=(?<secret>.*)`,
+		`<rss><channel><item><title>secret</title></item></channel></rss>`,
+	}
+	loader := &testLoader{err: &canaryRefreshCause{values: canaries}}
+	provider := NewProvider(testSnapshot("old"), loader)
+
+	// When
+	err := provider.Refresh(context.Background(), ScopeRadarrRules)
+
+	// Then
+	if !errors.Is(err, ErrSnapshotRefresh) {
+		t.Fatalf("Refresh() error = %v, want ErrSnapshotRefresh", err)
+	}
+	var cause *canaryRefreshCause
+	if errors.As(err, &cause) {
+		t.Fatalf("raw refresh cause is reachable through errors.As: %#v", cause)
+	}
+	for _, text := range errorGraphTexts(err) {
+		for _, canary := range canaries {
+			if strings.Contains(text, canary) {
+				t.Fatalf("error graph exposed canary %q in %q", canary, text)
+			}
+		}
+	}
+	t.Logf("task5_runtime_qa redacted_error=true canary_count=%d typed_category=%t", len(canaries), errors.Is(err, ErrSnapshotRefresh))
+}
+
+func errorGraphTexts(err error) []string {
+	if err == nil {
+		return nil
+	}
+	texts := []string{err.Error(), fmt.Sprintf("%+v", err), fmt.Sprintf("%#v", err)}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		texts = append(texts, errorGraphTexts(wrapped.Unwrap())...)
+	}
+	if wrapped, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, child := range wrapped.Unwrap() {
+			texts = append(texts, errorGraphTexts(child)...)
+		}
+	}
+	return texts
+}
+
 func TestProviderSnapshot_returnsDeepCopy(t *testing.T) {
 	// Given
 	provider := NewStaticProvider(testSnapshot("old"))
@@ -79,6 +141,7 @@ func TestProviderSnapshot_returnsDeepCopy(t *testing.T) {
 	if second.Radarr.Rules[0].Replacement != "old" || second.Radarr.Rules[0].ValidStatus != nil {
 		t.Fatalf("published snapshot was mutated: %+v", second)
 	}
+	t.Logf("task5_runtime_qa deep_snapshot_copy=true pointer_copy=true")
 }
 
 func TestRegistryInvalidate_advancesOnlyMatchingSearchRevision(t *testing.T) {
@@ -96,6 +159,7 @@ func TestRegistryInvalidate_advancesOnlyMatchingSearchRevision(t *testing.T) {
 	if err != nil || after.SonarrSearchRevision == before.SonarrSearchRevision || after.RadarrSearchRevision != before.RadarrSearchRevision {
 		t.Fatalf("err=%v before=%+v after=%+v", err, before, after)
 	}
+	t.Logf("task5_runtime_qa sonarr_search_revision_changed=%t radarr_search_revision_unchanged=%t", after.SonarrSearchRevision != before.SonarrSearchRevision, after.RadarrSearchRevision == before.RadarrSearchRevision)
 }
 
 func TestRegistryInvalidate_advancesOnlyRadarrSearchRevision_whenRadarrTitlesChange(t *testing.T) {
@@ -113,6 +177,7 @@ func TestRegistryInvalidate_advancesOnlyRadarrSearchRevision_whenRadarrTitlesCha
 	if err != nil || after.RadarrSearchRevision == before.RadarrSearchRevision || after.SonarrSearchRevision != before.SonarrSearchRevision {
 		t.Fatalf("err=%v before=%+v after=%+v", err, before, after)
 	}
+	t.Logf("task5_runtime_qa radarr_search_revision_changed=%t sonarr_search_revision_unchanged=%t", after.RadarrSearchRevision != before.RadarrSearchRevision, after.SonarrSearchRevision == before.SonarrSearchRevision)
 }
 
 func TestRegistryInvalidate_rejectsUnknownNames_beforeEffects(t *testing.T) {

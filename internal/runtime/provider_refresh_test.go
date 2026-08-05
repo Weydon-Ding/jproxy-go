@@ -52,7 +52,7 @@ func TestProviderRefresh_doesNotPublish_whenContextCancelledBeforeOrDuringLoad(t
 
 	// Then
 	after := provider.Snapshot()
-	if !errors.Is(beforeErr, context.Canceled) || !errors.Is(duringErr, context.Canceled) || after.RadarrRevision != before.RadarrRevision || loader.loads != 1 {
+	if !errors.Is(beforeErr, context.Canceled) || !errors.Is(duringErr, ErrSnapshotRefresh) || after.RadarrRevision != before.RadarrRevision || loader.loads != 1 {
 		t.Fatalf("before=%v during=%v revisions=%d/%d loads=%d", beforeErr, duringErr, before.RadarrRevision, after.RadarrRevision, loader.loads)
 	}
 }
@@ -124,4 +124,5 @@ func TestProviderRefresh_doesNotPublish_whenContextCancelledImmediatelyBeforePub
 	if !errors.Is(err, context.Canceled) || after.RadarrRevision != before.RadarrRevision || after.Radarr.Rules[0].Replacement != "old" {
 		t.Fatalf("err=%v before=%+v after=%+v", err, before, after)
 	}
+	t.Logf("task5_runtime_qa before_publish_cancel=true old_snapshot_retained=%t", after.Radarr.Rules[0].Replacement == "old")
 }

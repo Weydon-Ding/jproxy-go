@@ -78,7 +78,7 @@ function Add-EvidenceRecord {
     "evidence_generator=scripts/generate-task5-evidence.ps1"
 ) -join [Environment]::NewLine) + [Environment]::NewLine, $utf8)
 
-Add-EvidenceRecord "runtime_proxy_regressions" "go" @("test", "./internal/runtime", "./internal/proxy", "-count=1", "-v")
+Add-EvidenceRecord "runtime_proxy_regressions" "go" @("test", "./internal/runtime", "./internal/proxy", "./internal/store/sqlite", "./internal/cache", "-count=10", "-shuffle=on", "-v")
 Add-EvidenceRecord "full_test" "go" @("test", "./...", "-count=1", "-shuffle=on")
 Add-EvidenceRecord "build" "go" @("build", "./cmd/jproxy")
 Add-EvidenceRecord "vet" "go" @("vet", "./...")

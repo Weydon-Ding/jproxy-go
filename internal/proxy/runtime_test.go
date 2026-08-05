@@ -134,6 +134,7 @@ func TestServer_keepsRadarrOffsetCache_whenSonarrTitlesAreInvalidated(t *testing
 	if len(radarrQueries) != 2 || !strings.Contains(radarrQueries[1], "offset=1") || !strings.Contains(radarrQueries[1], "q=Movie+Title+2024") {
 		t.Fatalf("queries=%v", radarrQueries)
 	}
+	t.Logf("task5_http_qa per_kind_offset=true invalidation=%s upstream_count=%d second_query_has_original_offset=%t", runtime.SonarrSearchTitle, len(radarrQueries), strings.Contains(radarrQueries[1], "offset=1"))
 }
 
 func runtimeSnapshot(radarr, sonarr string) sqlite.Snapshot {

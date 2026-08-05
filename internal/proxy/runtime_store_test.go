@@ -2,6 +2,8 @@ package proxy
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -60,6 +62,7 @@ func TestServer_usesRealStoreSnapshot_afterRadarrRuleInvalidation(t *testing.T) 
 	if !contains(radarrOld, "radarr-old") || !contains(radarrNew, "radarr-new") || sonarrNew != sonarrOld || counters["/api"] != 3 || loader.count() != 2 {
 		t.Fatalf("old=%q new=%q sonarr=%q calls=%v loads=%d", radarrOld, radarrNew, sonarrNew, counters, loader.count())
 	}
+	t.Logf("task5_http_qa invalidation=%s radarr_old_hash=%s radarr_new_hash=%s sonarr_hash=%s sonarr_unchanged=%t upstream_count=%d loader_count=%d", runtime.RadarrRule, evidenceHash(radarrOld), evidenceHash(radarrNew), evidenceHash(sonarrNew), sonarrNew == sonarrOld, counters["/api"], loader.count())
 }
 
 func TestServer_retainsLastKnownGood_whenRealStoreRefreshIsMalformed_thenRetries(t *testing.T) {
@@ -94,6 +97,12 @@ func TestServer_retainsLastKnownGood_whenRealStoreRefreshIsMalformed_thenRetries
 	if err == nil || before.RadarrRevision != failureRevision || afterFailure != old || retryErr != nil || !contains(afterRetry, "repaired") || after.RadarrRevision != before.RadarrRevision+1 || calls != 2 || loader.count() != 3 {
 		t.Fatalf("refresh=%v retry=%v old=%q failed=%q retried=%q calls=%d loads=%d revisions=%d/%d", err, retryErr, old, afterFailure, afterRetry, calls, loader.count(), before.RadarrRevision, after.RadarrRevision)
 	}
+	t.Logf("task5_http_qa lkg_retry=true initial_hash=%s failed_hash=%s retry_hash=%s calls=%d loader_count=%d revision_before=%d revision_after=%d", evidenceHash(old), evidenceHash(afterFailure), evidenceHash(afterRetry), calls, loader.count(), before.RadarrRevision, after.RadarrRevision)
+}
+
+func evidenceHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("sha256:%x", sum[:8])
 }
 
 func runtimeStoreFixture(t *testing.T) (*sqlite.Store, *countingStoreLoader, sqlite.Snapshot) {

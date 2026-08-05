@@ -14,15 +14,13 @@ import (
 
 var ErrSnapshotRefresh = errors.New("runtime formatter snapshot refresh failed")
 
-type snapshotRefreshError struct{ cause error }
+type snapshotRefreshError struct{}
 
 func (e snapshotRefreshError) Error() string { return ErrSnapshotRefresh.Error() }
 
 func (e snapshotRefreshError) Is(target error) bool {
-	return target == ErrSnapshotRefresh || errors.Is(e.cause, target)
+	return target == ErrSnapshotRefresh
 }
-
-func (e snapshotRefreshError) Unwrap() error { return e.cause }
 
 type Scope uint8
 
@@ -96,7 +94,7 @@ func (p *provider) Refresh(ctx context.Context, scopes Scope) error {
 	}
 	loaded, err := p.loader.LoadFormatterSnapshot(ctx)
 	if err != nil {
-		return snapshotRefreshError{cause: err}
+		return snapshotRefreshError{}
 	}
 	current := p.Snapshot()
 	next := snapshotFromSQLite(loaded, current, scopes)
