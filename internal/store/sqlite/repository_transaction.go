@@ -58,7 +58,7 @@ func (s *Store) InTransaction(ctx context.Context, fn func(DatasetTransaction) e
 	if err = fn(datasetTransaction{tx}); err != nil {
 		return err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = s.commit(tx); err != nil {
 		return fmt.Errorf("commit dataset transaction: %w", err)
 	}
 	return nil

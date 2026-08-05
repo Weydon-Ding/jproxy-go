@@ -22,6 +22,7 @@ type Store struct {
 	db         *sql.DB
 	lock       *writerLock
 	backupPath string
+	commit     func(*sql.Tx) error
 }
 
 type backupFunc func(context.Context, *sql.DB, string) (string, error)
@@ -68,7 +69,7 @@ func open(ctx context.Context, path string, options lifecycleOptions) (_ *Store,
 		}
 	}()
 
-	store := &Store{db: db, lock: lock}
+	store := &Store{db: db, lock: lock, commit: func(tx *sql.Tx) error { return tx.Commit() }}
 	inspection, inspectErr := inspectSchema(ctx, db)
 	if exists && inspection.kind == inspectionJavaUnmanaged {
 		backupPath, backupErr := options.backup(ctx, db, absolutePath)
