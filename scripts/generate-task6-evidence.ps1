@@ -12,7 +12,7 @@ function Record([string]$Label, [string]$Command, [string[]]$Arguments, [int]$Ti
   if(-not $process.WaitForExit($Timeout*1000)){ $process.Kill($true); throw "timeout: $Label" }; [Threading.Tasks.Task]::WaitAll(@($stdout,$stderr)); $out=$stdout.GetAwaiter().GetResult(); $err=$stderr.GetAwaiter().GetResult()
   [IO.File]::AppendAllText($output,"--- record ---`nlabel=$Label`ncommand=$Command $($Arguments -join ' ')`nexit_code=$($process.ExitCode)`nstdout:`n$out`nstderr:`n$err`n",$utf8); if($process.ExitCode -ne 0){throw "failed: $Label"}
 }
-Record "route_matrix_http_and_fallbacks" "go" @("test","./internal/api/system","-count=10","-shuffle=on","-v") 300
+Record "route_matrix_http_and_fallbacks" "go" @("test","./internal/api/system","./internal/app","./internal/runtime","./internal/store/sqlite","./internal/proxy","-count=10","-shuffle=on","-v") 900
 Record "full_test" "go" @("test","./...","-count=1","-shuffle=on") 300
 Record "build" "go" @("build","./cmd/jproxy") 180
 Record "vet" "go" @("vet","./...") 180
