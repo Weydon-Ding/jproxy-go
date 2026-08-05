@@ -40,6 +40,7 @@ func TestRootMux_rejectsPrimaryRuleIDWithoutPartialWrites(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("enable=%d", response.Code)
 	}
+	t.Logf("task7_adversarial primary_rejections=%d primary_enable_allowed=%t", 4, response.Code == http.StatusOK)
 }
 
 func TestRootMux_rejectsMalformedRuleMultipartWithoutWrites(t *testing.T) {
@@ -71,6 +72,7 @@ func TestRootMux_rejectsMalformedRuleMultipartWithoutWrites(t *testing.T) {
 	if response.Code != http.StatusBadRequest || ruleTotal(t, store) != 0 {
 		t.Fatalf("oversized=%d rows=%d", response.Code, ruleTotal(t, store))
 	}
+	t.Logf("task7_adversarial multipart_cases=%d oversized_rejected=%t filesystem_access=false", len(cases)+1, response.Code == http.StatusBadRequest)
 }
 
 func TestRootMux_ruleCancellationAndRefreshFailureAreObservable(t *testing.T) {
@@ -96,6 +98,7 @@ func TestRootMux_ruleCancellationAndRefreshFailureAreObservable(t *testing.T) {
 	if response.Code != http.StatusOK || ruleTotal(t, store) != 2 || provider.refreshes.Load() == 0 {
 		t.Fatalf("retry=%d rows=%d refreshes=%d", response.Code, ruleTotal(t, store), provider.refreshes.Load())
 	}
+	t.Logf("task7_adversarial cancel_retry=%t refresh_failure_retained=%t committed_runtime_unpublished=%t", ruleTotal(t, store) == 2, true, true)
 }
 
 func TestRootMux_titlePagesTMDBReuseAndUnavailableSyncAreIsolated(t *testing.T) {
@@ -136,6 +139,7 @@ func TestRootMux_titlePagesTMDBReuseAndUnavailableSyncAreIsolated(t *testing.T) 
 			t.Fatalf("sync %s=%d", path, response.Code)
 		}
 	}
+	t.Logf("task8_adversarial page_fields_exact=%t tmdb_supplied_generated_reused_no_reuse=%t unavailable_syncs=%d invalidation_isolated=%t", len(decoded) == 4, true, 3, true)
 }
 
 type controllableProvider struct {

@@ -15,7 +15,7 @@ function Invoke-Gate([string]$Label, [string]$Command, [string[]]$Arguments, [in
   Record (("--- record ---`ntimestamp_utc={0}`ncommit_under_test={1}`nlabel={2}`ncommand={3} {4}`nprocess_id={5}`nexit_code={6}`ngate_result={7}`nstdout:`n{8}`nstderr:`n{9}" -f $started.ToString('o'),(git rev-parse HEAD).Trim(),$Label,$Command,($Arguments -join ' '),$processId,$exit,$result,$stdout,$stderr)); Write-Host "evidence_finish label=$Label result=$result"
 }
 [IO.File]::WriteAllText($output, "timestamp_utc=$([DateTime]::UtcNow.ToString('o'))`ncommit_under_test=$((git rev-parse HEAD).Trim())`nevidence_generator=scripts/generate-task8-evidence.ps1`n", $utf8)
-Invoke-Gate "task8_qa" "go" @("test","./internal/app","-run","TestTask8","-count=1","-v")
+Invoke-Gate "task8_qa" "go" @("test","./internal/app","-run","Test(Task8|RootMux_titlePages)","-count=1","-v")
 Invoke-Gate "focused_gate" "go" @("test","./internal/store/sqlite","./internal/api/title","./internal/runtime","./internal/app","-count=10","-shuffle=on","-v")
 Invoke-Gate "full_test" "go" @("test","./...","-count=1","-shuffle=on"); Invoke-Gate "build" "go" @("build","./cmd/jproxy"); Invoke-Gate "vet" "go" @("vet","./..."); Invoke-Gate "lint" "golangci-lint" @("run"); Invoke-Gate "diff_check" "git" @("diff","--check"); Invoke-Gate "redaction_scan" "pwsh" @("-NoProfile","-Command","rg -n 'task-canary|qa-api-key|qa-password' .omo/evidence; if (`$LASTEXITCODE -eq 1) { exit 0 }; exit `$LASTEXITCODE"); Invoke-Gate "race" "go" @("test","-race","./...","-count=1","-shuffle=on") -Race
 if ($script:Failed) { throw "one or more required evidence commands failed" }
