@@ -9,6 +9,7 @@ import (
 
 type RuntimeOptions struct {
 	Provider runtime.Provider
+	Markers  *cache.TTLCache[struct{}]
 }
 
 func NewServerWithRuntime(cfg config.Config, options RuntimeOptions) *Server {
@@ -18,7 +19,10 @@ func NewServerWithRuntime(cfg config.Config, options RuntimeOptions) *Server {
 	}
 	results := cache.NewTTLCache[string](cfg.IndexerResultCacheTTL, cfg.ResultCacheMaxEntries)
 	offsets := cache.NewTTLCache[[]int](cfg.OffsetCacheTTL, cfg.OffsetCacheMaxEntries)
-	markers := cache.NewTTLCache[struct{}](cfg.OffsetCacheTTL, 3)
+	markers := options.Markers
+	if markers == nil {
+		markers = cache.NewTTLCache[struct{}](cfg.OffsetCacheTTL, 3)
+	}
 	return &Server{
 		cfg:         cfg,
 		client:      newHTTPClient(cfg),
