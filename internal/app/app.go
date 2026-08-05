@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"jproxy-go/internal/api/system"
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/proxy"
 	"jproxy-go/internal/runtime"
@@ -114,7 +115,11 @@ func productionDependencies() runtimeDependencies {
 		openStore: sqliteStore,
 		listen:    net.Listen,
 		newHandler: func(cfg config.Config, provider runtime.Provider) http.Handler {
-			return proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider}).Routes()
+			server := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
+			if !cfg.Database.Enabled {
+				return server.Routes()
+			}
+			return server.Routes()
 		},
 		newServer:   func(handler http.Handler) runtimeServer { return &http.Server{Handler: handler} },
 		shutdownFor: shutdownTimeout,
@@ -154,6 +159,15 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 	}
 
 	handler := deps.newHandler(cfg, provider)
+	if cfg.Database.Enabled {
+		if concreteStore, ok := store.(*sqlite.Store); ok {
+			proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
+			root := http.NewServeMux()
+			root.Handle("/api/system/", system.NewHandler(system.Options{Store: concreteStore, Provider: provider, Registry: proxyServer.CacheRegistry()}))
+			root.Handle("/", proxyServer.Routes())
+			handler = root
+		}
+	}
 	listener, runErr = deps.listen("tcp", cfg.Addr)
 	if runErr != nil {
 		return cleanup(cancel, store, listener, server, served, false, failure{FailureListen, runErr}, deps.shutdownFor)
