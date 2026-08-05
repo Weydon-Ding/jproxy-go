@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"jproxy-go/internal/api/system"
@@ -126,6 +127,18 @@ func productionDependencies() runtimeDependencies {
 	}
 }
 
+func localVersion(info *debug.BuildInfo, ok bool) string {
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+	return info.Main.Version
+}
+
+func localBuildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	return localVersion(info, ok)
+}
+
 func sqliteStore(ctx context.Context, path string) (runtimeStore, error) {
 	return sqlite.Open(ctx, path)
 }
@@ -193,7 +206,7 @@ func rootHandler(cfg config.Config, provider runtime.Provider, store system.Stor
 		return proxyServer.Routes()
 	}
 	root := http.NewServeMux()
-	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: proxyServer.CacheRegistry()}))
+	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: proxyServer.CacheRegistry(), Version: localBuildVersion()}))
 	root.Handle("/", proxyServer.Routes())
 	return root
 }

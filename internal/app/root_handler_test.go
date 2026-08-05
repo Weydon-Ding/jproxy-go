@@ -47,7 +47,7 @@ func TestRootHandler_updatesRealStoreAndNextProxyUsesPublishedFormat(t *testing.
 	rows := rootPayload(t, store)
 	for _, row := range rows {
 		if row["key"] == "radarrIndexerFormat" {
-			row["value"] = "[{title}]"
+			row["value"] = "[{title}] {year}"
 		}
 	}
 	payload, err := json.Marshal(rows)
@@ -95,12 +95,12 @@ func TestRootHandler_switchesJackettAndProwlarrAfterCompleteUpdate(t *testing.T)
 		oldHits++
 		_, _ = w.Write([]byte(`<rss><channel/></rss>`))
 	}))
-	new := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	replacement := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		newHits++
 		_, _ = w.Write([]byte(`<rss><channel/></rss>`))
 	}))
 	t.Cleanup(old.Close)
-	t.Cleanup(new.Close)
+	t.Cleanup(replacement.Close)
 	seedURLs(t, store, old.URL)
 	initial, err := store.FormatterSnapshot(ctx)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestRootHandler_switchesJackettAndProwlarrAfterCompleteUpdate(t *testing.T)
 	rows := rootPayload(t, store)
 	for _, row := range rows {
 		if row["key"] == "jackettUrl" || row["key"] == "prowlarrUrl" {
-			row["value"] = new.URL
+			row["value"] = replacement.URL
 		}
 	}
 	payload, err := json.Marshal(rows)
@@ -132,7 +132,7 @@ func TestRootHandler_switchesJackettAndProwlarrAfterCompleteUpdate(t *testing.T)
 	}
 	getBody(t, server.URL+"/radarr/jackett/api?new=1")
 	getBody(t, server.URL+"/sonarr/prowlarr/1/api?new=1")
-	if oldHits != 2 || newHits != 2 || provider.Snapshot().JackettURL != new.URL || provider.Snapshot().ProwlarrURL != new.URL {
+	if oldHits != 2 || newHits != 2 || provider.Snapshot().JackettURL != replacement.URL || provider.Snapshot().ProwlarrURL != replacement.URL {
 		t.Fatalf("old_hits=%d new_hits=%d snapshot=%q/%q", oldHits, newHits, provider.Snapshot().JackettURL, provider.Snapshot().ProwlarrURL)
 	}
 	t.Logf("task6_upstream_switch old_hits=%d new_hits=%d revision=%d", oldHits, newHits, provider.Snapshot().RadarrRevision)

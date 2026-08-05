@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,15 @@ func TestRun_servesHealthAndShutsDown_whenEnvironmentModeIsCancelled(t *testing.
 	}
 	if err := awaitResult(t, result); err != nil {
 		t.Fatalf("Run() error = %v", err)
+	}
+}
+
+func TestLocalVersion_usesReleaseVersionWhenAvailable(t *testing.T) {
+	if actual := localVersion(&debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}}, true); actual != "v1.2.3" {
+		t.Fatalf("release version=%q", actual)
+	}
+	if actual := localVersion(&debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, true); actual != "dev" {
+		t.Fatalf("development version=%q", actual)
 	}
 }
 
