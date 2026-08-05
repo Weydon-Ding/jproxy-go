@@ -66,7 +66,10 @@ func (c requestClient) get(ctx context.Context, provider, operation string, cfg 
 		if errors.Is(requestContext.Err(), context.Canceled) || errors.Is(requestContext.Err(), context.DeadlineExceeded) {
 			return nil, &HTTPError{Provider: provider, Operation: operation, err: requestContext.Err()}
 		}
-		return nil, &HTTPError{Provider: provider, Operation: operation, err: err}
+		if errors.Is(err, errRedirect) {
+			return nil, &HTTPError{Provider: provider, Operation: operation, err: errRedirect}
+		}
+		return nil, &HTTPError{Provider: provider, Operation: operation}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {

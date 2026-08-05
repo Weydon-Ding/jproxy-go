@@ -43,6 +43,20 @@ func TestConfigSource_loadSonarr_rejectsInvalidAndNeverReturnsSecret(t *testing.
 	}
 }
 
+func TestConfigSource_loadRadarr_readsProviderSpecificValues_whenRowsAreActive(t *testing.T) {
+	// Given
+	rows := []sqlite.SystemConfig{activeConfig("radarrUrl", "https://example.test/radarr"), activeConfig("radarrApikey", "radarr-secret"), activeConfig("cleanTitleRegex", "")}
+	source := NewConfigSource(configListFake{rows: &rows})
+
+	// When
+	config, err := source.loadRadarr(context.Background())
+
+	// Then
+	if err != nil || config.baseURL.Path != "/radarr" || config.apiKey != "radarr-secret" {
+		t.Fatalf("unexpected Radarr config: %v", err)
+	}
+}
+
 func TestSonarrClient_fetch_usesPathPrefixAndEncodedKey_whenUpstreamSucceeds(t *testing.T) {
 	// Given
 	var gotPath, gotKey string
@@ -66,11 +80,34 @@ func TestSonarrClient_fetch_usesPathPrefixAndEncodedKey_whenUpstreamSucceeds(t *
 	}
 }
 
+func TestRadarrClient_fetch_usesMovieEndpoint_whenUpstreamSucceeds(t *testing.T) {
+	// Given
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		gotPath = request.URL.Path
+		_, _ = writer.Write([]byte(`[{"id":1,"tmdbId":2,"title":"Main","path":"/movies/Main (2024)","cleanTitle":"main","originalTitle":"Original","year":2024,"monitored":false,"alternateTitles":[]}]`))
+	}))
+	defer server.Close()
+	config, err := providerConfigFor(server.URL+"/base", "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewRadarrClient(newRequestClient(nil, time.Second))
+
+	// When
+	values, err := client.Fetch(context.Background(), config)
+
+	// Then
+	if err != nil || len(values) != 1 || gotPath != "/base/api/v3/movie" {
+		t.Fatalf("unexpected response/path: %#v %q %v", values, gotPath, err)
+	}
+}
+
 func TestClients_fetch_rejectsProtocolFailuresWithoutSecretLeak(t *testing.T) {
 	for _, body := range []string{"null", `{}`, `[] {}`, `[] []`, strings.Repeat("x", maxResponseBytes+1)} {
 		t.Run("invalid response", func(t *testing.T) {
 			secret := "do-not-leak"
-			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) { _, _ = writer.Write([]byte(body)) }))
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(body)) }))
 			defer server.Close()
 			config, err := providerConfigFor(server.URL, secret)
 			if err != nil {
@@ -86,7 +123,7 @@ func TestClients_fetch_rejectsProtocolFailuresWithoutSecretLeak(t *testing.T) {
 
 func TestRequestClient_get_preservesCancellationAndTimeoutIdentity(t *testing.T) {
 	// Given
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) { <-request.Context().Done() }))
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) { <-request.Context().Done() }))
 	defer server.Close()
 	config, err := providerConfigFor(server.URL, "secret")
 	if err != nil {
@@ -101,6 +138,27 @@ func TestRequestClient_get_preservesCancellationAndTimeoutIdentity(t *testing.T)
 	// Then
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want cancellation identity: %v", err)
+	}
+}
+
+func TestRequestClient_get_rejectsRedirectWithoutReturningCredentialURL(t *testing.T) {
+	// Given
+	secret := "redirect-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, "/other", http.StatusFound)
+	}))
+	defer server.Close()
+	config, err := providerConfigFor(server.URL, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// When
+	_, err = newRequestClient(nil, time.Second).get(context.Background(), "sonarr", "series", config, "api")
+
+	// Then
+	if !errors.Is(err, errRedirect) || strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), server.URL) {
+		t.Fatalf("want sanitized redirect rejection: %v", err)
 	}
 }
 

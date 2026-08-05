@@ -20,11 +20,6 @@ type providerConfig struct {
 	cleanRE string
 }
 
-type configSource interface {
-	loadSonarr(context.Context) (providerConfig, error)
-	loadRadarr(context.Context) (providerConfig, error)
-}
-
 type ConfigSource struct{ repository sqlite.SystemConfigRepository }
 
 func NewConfigSource(repository sqlite.SystemConfigRepository) *ConfigSource {
