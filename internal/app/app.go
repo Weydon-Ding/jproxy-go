@@ -200,13 +200,13 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 	return cleanup(cancel, store, listener, server, served, serveDone, runErr, deps.shutdownFor)
 }
 
-func rootHandler(cfg config.Config, provider runtime.Provider, store system.Store) http.Handler {
+func rootHandler(cfg config.Config, provider runtime.Provider, store managementStore) http.Handler {
 	proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
 	if !cfg.Database.Enabled {
 		return proxyServer.Routes()
 	}
 	root := http.NewServeMux()
-	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: proxyServer.CacheRegistry(), Version: localBuildVersion()}))
+	root.Handle("/api/", managementRoutes(store, provider, proxyServer.CacheRegistry()))
 	root.Handle("/", proxyServer.Routes())
 	return root
 }
