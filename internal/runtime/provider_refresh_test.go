@@ -83,3 +83,27 @@ func TestProviderRefresh_publishesOnlyCompleteSnapshots_duringConcurrentReads(t 
 		t.Fatalf("published snapshot = %+v", after)
 	}
 }
+
+func TestProviderRefresh_serializesConcurrentInvalidations(t *testing.T) {
+	// Given
+	loader := &testLoader{snapshot: testSnapshot("new")}
+	provider := NewProvider(testSnapshot("old"), loader)
+	registry := NewRegistry(provider, &testCache{}, &testCache{}, &testCache{})
+	results := make(chan error, 4)
+
+	// When
+	for range 4 {
+		go func() { results <- registry.Invalidate(context.Background(), RadarrRule) }()
+	}
+	for range 4 {
+		if err := <-results; err != nil {
+			t.Fatalf("Invalidate() error = %v", err)
+		}
+	}
+
+	// Then
+	snapshot := provider.Snapshot()
+	if loader.loads != 4 || snapshot.RadarrRevision != 6 || snapshot.Radarr.Rules[0].Replacement != "new" {
+		t.Fatalf("loads=%d revision=%d snapshot=%+v", loader.loads, snapshot.RadarrRevision, snapshot)
+	}
+}

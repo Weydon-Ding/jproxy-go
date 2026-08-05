@@ -81,6 +81,32 @@ func TestServer_keepsDisabledFormatterBytesIdentical_afterInvalidation(t *testin
 	}
 }
 
+func TestServer_staticProviderKeepsDisabledBytesAndCache_afterInvalidation(t *testing.T) {
+	// Given
+	const xml = `<rss><channel><item><title>Movie.2024</title></item></channel></rss>`
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(xml))
+	}))
+	defer upstream.Close()
+	cfg := testConfig(upstream.URL, upstream.URL)
+	cfg.ResultCacheMaxEntries = 10
+	server := NewServerWithRuntime(cfg, RuntimeOptions{Provider: runtime.NewStaticProvider(sqlite.Snapshot{})})
+
+	// When
+	first := warm(t, server, "/radarr/jackett/api?t=search")
+	if err := server.CacheRegistry().Invalidate(context.Background(), runtime.RadarrRule); err != nil {
+		t.Fatalf("Invalidate() error = %v", err)
+	}
+	second := warm(t, server, "/radarr/jackett/api?t=search")
+
+	// Then
+	if first != xml || second != xml || calls != 1 {
+		t.Fatalf("first=%q second=%q calls=%d", first, second, calls)
+	}
+}
+
 func runtimeSnapshot(radarr, sonarr string) sqlite.Snapshot {
 	return sqlite.Snapshot{Radarr: format.Config{Format: "{title}", Rules: []format.Rule{{Token: "title", Regex: ".*", Replacement: radarr}}}, Sonarr: format.SonarrConfig{Format: "{title}", Rules: []format.Rule{{Token: "title", Regex: ".*", Replacement: sonarr}}}}
 }
