@@ -46,7 +46,6 @@ func TestRootMux_titleQueriesPageFilterAndRemainSideEffectFree(t *testing.T) {
 	if first.Total != 3 || first.IDs[0] != 3 || second.IDs[0] != 2 || filtered.Total != 2 || tmdb.Total != 1 || bad.Code != http.StatusBadRequest || !reflect.DeepEqual(provider.Snapshot(), before) {
 		t.Fatalf("first=%+v second=%+v filtered=%+v tmdb=%+v bad=%d", first, second, filtered, tmdb, bad.Code)
 	}
-	t.Logf("task8_adversarial title_page_defaults_filters_order=%t clean_title_query_side_effect_free=%t", true, true)
 }
 
 func TestRootMux_titleQueriesIgnoreBlankAndTrimPaddedFilters(t *testing.T) {
@@ -115,7 +114,6 @@ func TestRootMux_titleRemovalsInvalidateOnlyTheirRuntimeDomains(t *testing.T) {
 	if remove.Code != http.StatusOK || afterRadarr.RadarrRevision <= afterSonarr.RadarrRevision || afterRadarr.SonarrRevision != afterSonarr.SonarrRevision || cacheState(results, offsets, markers) != 2 {
 		t.Fatalf("radarr status=%d after_sonarr=%+v after_radarr=%+v cache=%d", remove.Code, afterSonarr, afterRadarr, cacheState(results, offsets, markers))
 	}
-	t.Logf("task8_adversarial sonarr_radarr_invalidation_isolated=%t offsets_cleared_results_and_markers_retained=%t", true, true)
 }
 
 type rootTitlePage struct {
