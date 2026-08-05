@@ -82,6 +82,62 @@ func TestRootHandler_hidesManagementRoutesOutsideDatabaseMode(t *testing.T) {
 	}
 }
 
+func TestRootHandler_switchesJackettAndProwlarrAfterCompleteUpdate(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "upstream.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	seedRootConfigs(t, store)
+	oldHits, newHits := 0, 0
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		oldHits++
+		_, _ = w.Write([]byte(`<rss><channel/></rss>`))
+	}))
+	new := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		newHits++
+		_, _ = w.Write([]byte(`<rss><channel/></rss>`))
+	}))
+	t.Cleanup(old.Close)
+	t.Cleanup(new.Close)
+	seedURLs(t, store, old.URL)
+	initial, err := store.FormatterSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := runtime.NewProvider(initial, store)
+	cfg := config.Config{JackettURL: old.URL, ProwlarrURL: old.URL, HTTPTimeout: time.Second, Database: config.DatabaseConfig{Enabled: true}}
+	server := httptest.NewServer(rootHandler(cfg, provider, store))
+	t.Cleanup(server.Close)
+	getBody(t, server.URL+"/radarr/jackett/api")
+	getBody(t, server.URL+"/sonarr/prowlarr/1/api")
+	rows := rootPayload(t, store)
+	for _, row := range rows {
+		if row["key"] == "jackettUrl" || row["key"] == "prowlarrUrl" {
+			row["value"] = new.URL
+		}
+	}
+	payload, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Post(server.URL+"/api/system/config/update", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("update status=%d", response.StatusCode)
+	}
+	getBody(t, server.URL+"/radarr/jackett/api?new=1")
+	getBody(t, server.URL+"/sonarr/prowlarr/1/api?new=1")
+	if oldHits != 2 || newHits != 2 || provider.Snapshot().JackettURL != new.URL || provider.Snapshot().ProwlarrURL != new.URL {
+		t.Fatalf("old_hits=%d new_hits=%d snapshot=%q/%q", oldHits, newHits, provider.Snapshot().JackettURL, provider.Snapshot().ProwlarrURL)
+	}
+	t.Logf("task6_upstream_switch old_hits=%d new_hits=%d revision=%d", oldHits, newHits, provider.Snapshot().RadarrRevision)
+}
+
 func seedRootConfigs(t *testing.T, store *sqlite.Store) {
 	t.Helper()
 	rows := system.DefaultConfigs()
@@ -91,6 +147,13 @@ func seedRootConfigs(t *testing.T, store *sqlite.Store) {
 		values = append(values, sqlite.SystemConfig{ID: sqlite.SystemConfigID(row.ID), Key: row.Key, Value: &value, ValidStatus: sqlite.Valid})
 	}
 	if err := store.Repositories().SystemConfigs.UpsertBatch(context.Background(), values); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedURLs(t *testing.T, store *sqlite.Store, value string) {
+	t.Helper()
+	if err := store.Repositories().SystemConfigs.UpsertBatch(context.Background(), []sqlite.SystemConfig{{ID: 10, Key: "jackettUrl", Value: &value, ValidStatus: sqlite.Valid}, {ID: 11, Key: "prowlarrUrl", Value: &value, ValidStatus: sqlite.Valid}}); err != nil {
 		t.Fatal(err)
 	}
 }

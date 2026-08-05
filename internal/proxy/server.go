@@ -57,9 +57,9 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 		var err error
 
 		if searchKey == "" {
-			xml, err = s.executeRequest(r, backend, q)
+			xml, err = s.executeRequest(r, backend, q, snapshot)
 		} else {
-			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey, kindSearchRevision(kind, snapshot))
+			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey, kindSearchRevision(kind, snapshot), snapshot)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -78,12 +78,12 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 	}
 }
 
-func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q url.Values, searchKey string, revision uint64) (string, error) {
+func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q url.Values, searchKey string, revision uint64, snapshot runtime.Snapshot) (string, error) {
 	searchKey = strings.TrimSuffix(searchKey, " 00")
 	q.Set("q", searchKey)
 	titles := searchTitles(kind, searchKey)
 	if len(titles) == 0 {
-		return s.executeRequest(r, backend, q)
+		return s.executeRequest(r, backend, q, snapshot)
 	}
 
 	offset := intParam(q, "offset", 0)
@@ -108,7 +108,7 @@ func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q 
 			localQ.Set("q", removeSeasonEpisode(localQ.Get("q")))
 		}
 
-		newXML, err := s.executeRequest(r, backend, localQ)
+		newXML, err := s.executeRequest(r, backend, localQ, snapshot)
 		if err != nil {
 			return merged, err
 		}
@@ -128,8 +128,8 @@ func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q 
 	return merged, nil
 }
 
-func (s *Server) executeRequest(r *http.Request, backend string, q url.Values) (string, error) {
-	upstream := s.upstreamURL(backend, r.URL.Path)
+func (s *Server) executeRequest(r *http.Request, backend string, q url.Values, snapshot runtime.Snapshot) (string, error) {
+	upstream := s.upstreamURL(backend, r.URL.Path, snapshot)
 	u, err := url.Parse(upstream)
 	if err != nil {
 		return "", err
@@ -155,11 +155,17 @@ func (s *Server) executeRequest(r *http.Request, backend string, q url.Values) (
 	return string(b), nil
 }
 
-func (s *Server) upstreamURL(backend, path string) string {
-	base := s.cfg.JackettURL
+func (s *Server) upstreamURL(backend, path string, snapshot runtime.Snapshot) string {
+	base := snapshot.JackettURL
+	if base == "" {
+		base = s.cfg.JackettURL
+	}
 	prefixRE := regexp.MustCompile(`^/(sonarr|radarr)/jackett`)
 	if backend == "prowlarr" {
-		base = s.cfg.ProwlarrURL
+		base = snapshot.ProwlarrURL
+		if base == "" {
+			base = s.cfg.ProwlarrURL
+		}
 		prefixRE = regexp.MustCompile(`^/(sonarr|radarr)/prowlarr`)
 	}
 	return strings.TrimRight(base, "/") + prefixRE.ReplaceAllString(path, "")

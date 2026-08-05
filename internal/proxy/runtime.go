@@ -14,7 +14,7 @@ type RuntimeOptions struct {
 func NewServerWithRuntime(cfg config.Config, options RuntimeOptions) *Server {
 	provider := options.Provider
 	if provider == nil {
-		provider = runtime.NewStaticProvider(sqlite.Snapshot{Radarr: cfg.RadarrFormatting.Config, Sonarr: cfg.SonarrFormatting.Config})
+		provider = runtime.NewStaticProvider(sqlite.Snapshot{Radarr: cfg.RadarrFormatting.Config, Sonarr: cfg.SonarrFormatting.Config, JackettURL: cfg.JackettURL, ProwlarrURL: cfg.ProwlarrURL})
 	}
 	results := cache.NewTTLCache[string](cfg.IndexerResultCacheTTL, cfg.ResultCacheMaxEntries)
 	offsets := cache.NewTTLCache[[]int](cfg.OffsetCacheTTL, cfg.OffsetCacheMaxEntries)
