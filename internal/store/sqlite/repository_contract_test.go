@@ -100,6 +100,9 @@ func (tmdbTitleFake) Get(context.Context, sqlite.TMDBTitleID) (sqlite.TMDBTitle,
 	return sqlite.TMDBTitle{}, nil
 }
 func (tmdbTitleFake) Upsert(context.Context, sqlite.TMDBTitle) error { return nil }
+func (tmdbTitleFake) Save(context.Context, sqlite.TMDBTitleSaveInput) (sqlite.TMDBTitleSaveResult, error) {
+	return sqlite.TMDBTitleSaveResult{}, nil
+}
 func (tmdbTitleFake) Page(context.Context, sqlite.TMDBTitleFilter) (sqlite.PageResult[sqlite.TMDBTitle], error) {
 	return sqlite.PageResult[sqlite.TMDBTitle]{}, nil
 }

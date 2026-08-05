@@ -75,6 +75,7 @@ type RadarrTitleRepository interface {
 type TMDBTitleRepository interface {
 	Get(context.Context, TMDBTitleID) (TMDBTitle, error)
 	Upsert(context.Context, TMDBTitle) error
+	Save(context.Context, TMDBTitleSaveInput) (TMDBTitleSaveResult, error)
 	Page(context.Context, TMDBTitleFilter) (PageResult[TMDBTitle], error)
 	UpsertBatch(context.Context, TMDBTitleBatch) error
 	DeleteBatch(context.Context, TMDBTitleIDs) error

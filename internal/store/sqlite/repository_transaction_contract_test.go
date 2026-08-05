@@ -36,7 +36,10 @@ func (transactionFake) DeleteSonarrTitles(context.Context, sqlite.SonarrTitleIDs
 func (transactionFake) ReplaceSonarrTitles(context.Context, sqlite.SonarrTitleBatch) error {
 	return nil
 }
-func (transactionFake) UpsertTMDBTitles(context.Context, sqlite.TMDBTitleBatch) error  { return nil }
+func (transactionFake) UpsertTMDBTitles(context.Context, sqlite.TMDBTitleBatch) error { return nil }
+func (transactionFake) SaveTMDBTitle(context.Context, sqlite.TMDBTitleSaveInput) (sqlite.TMDBTitleSaveResult, error) {
+	return sqlite.TMDBTitleSaveResult{}, nil
+}
 func (transactionFake) DeleteTMDBTitles(context.Context, sqlite.TMDBTitleIDs) error    { return nil }
 func (transactionFake) ReplaceTMDBTitles(context.Context, sqlite.TMDBTitleBatch) error { return nil }
 func (transactionFake) UpsertSonarrExamples(context.Context, sqlite.SonarrExampleBatch) error {

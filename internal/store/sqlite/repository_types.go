@@ -64,6 +64,14 @@ type SonarrTitleBatch struct{ Rows []SonarrTitle }
 type SonarrTitleIDs struct{ IDs []SonarrTitleID }
 type TMDBTitleBatch struct{ Rows []TMDBTitle }
 type TMDBTitleIDs struct{ IDs []TMDBTitleID }
+type TMDBTitleSaveInput struct {
+	Title      TMDBTitle
+	SuppliedID bool
+}
+type TMDBTitleSaveResult struct {
+	ID        TMDBTitleID
+	Generated bool
+}
 type SonarrRuleBatch struct{ Rows []SonarrRule }
 type RadarrRuleBatch struct{ Rows []RadarrRule }
 type RuleIDs struct{ IDs []RuleID }

@@ -29,6 +29,7 @@ type DatasetTransaction interface {
 	DeleteSonarrTitles(context.Context, SonarrTitleIDs) error
 	ReplaceSonarrTitles(context.Context, SonarrTitleBatch) error
 	UpsertTMDBTitles(context.Context, TMDBTitleBatch) error
+	SaveTMDBTitle(context.Context, TMDBTitleSaveInput) (TMDBTitleSaveResult, error)
 	DeleteTMDBTitles(context.Context, TMDBTitleIDs) error
 	ReplaceTMDBTitles(context.Context, TMDBTitleBatch) error
 	UpsertSonarrExamples(context.Context, SonarrExampleBatch) error
@@ -138,6 +139,28 @@ func (t datasetTransaction) UpsertTMDBTitles(ctx context.Context, b TMDBTitleBat
 		}
 	}
 	return nil
+}
+func (t datasetTransaction) SaveTMDBTitle(ctx context.Context, input TMDBTitleSaveInput) (result TMDBTitleSaveResult, err error) {
+	if err := validateTMDBSave(input); err != nil {
+		return result, err
+	}
+	value := input.Title
+	if value.TMDBID == nil {
+		if err := reuseTMDBID(ctx, t.tx, &value); err != nil {
+			return result, err
+		}
+	}
+	if input.SuppliedID {
+		if err := upsertTMDBTitle(ctx, t.tx, value); err != nil {
+			return result, err
+		}
+		return TMDBTitleSaveResult{ID: value.ID}, nil
+	}
+	id, err := insertTMDBTitle(ctx, t.tx, value)
+	if err != nil {
+		return result, err
+	}
+	return TMDBTitleSaveResult{ID: id, Generated: true}, nil
 }
 func (t datasetTransaction) DeleteTMDBTitles(ctx context.Context, ids TMDBTitleIDs) error {
 	for _, id := range ids.IDs {
