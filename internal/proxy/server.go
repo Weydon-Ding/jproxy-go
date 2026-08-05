@@ -59,7 +59,7 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 		if searchKey == "" {
 			xml, err = s.executeRequest(r, backend, q)
 		} else {
-			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey, snapshot.SearchRevision)
+			xml, err = s.executeExpandedSearch(r, kind, backend, q, searchKey, kindSearchRevision(kind, snapshot))
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -182,6 +182,13 @@ func kindRevision(kind string, snapshot runtime.Snapshot) uint64 {
 		return snapshot.RadarrRevision
 	}
 	return snapshot.SonarrRevision
+}
+
+func kindSearchRevision(kind string, snapshot runtime.Snapshot) uint64 {
+	if kind == "radarr" {
+		return snapshot.RadarrSearchRevision
+	}
+	return snapshot.SonarrSearchRevision
 }
 
 func makeCacheKey(r *http.Request, revision uint64) string {

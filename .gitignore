@@ -31,6 +31,17 @@ go.work.sum
 # Project build output
 /bin/
 /dist/
+/jproxy
+/jproxy.db
+/jproxy.db-*
+/*.db-shm
+/*.db-wal
+/*.db-journal
+/*.bak-*
+
+# Local agent runtime artifacts and generated evidence
+/.omo/evidence/
+/.omo/run-continuation/
 
 # IDE / OS
 .vscode/

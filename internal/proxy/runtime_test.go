@@ -107,6 +107,35 @@ func TestServer_staticProviderKeepsDisabledBytesAndCache_afterInvalidation(t *te
 	}
 }
 
+func TestServer_keepsRadarrOffsetCache_whenSonarrTitlesAreInvalidated(t *testing.T) {
+	// Given
+	var radarrQueries []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		radarrQueries = append(radarrQueries, r.URL.Query().Encode())
+		_, _ = w.Write([]byte(rssWithItems(item(r.URL.Query().Get("q")))))
+	}))
+	defer upstream.Close()
+	loader := &liveLoader{snapshot: runtimeSnapshot("radarr", "sonarr")}
+	provider := runtime.NewProvider(loader.snapshot, loader)
+	cfg := testConfig(upstream.URL, upstream.URL)
+	cfg.OffsetCacheTTL = time.Minute
+	cfg.OffsetCacheMaxEntries = 10
+	server := NewServerWithRuntime(cfg, RuntimeOptions{Provider: provider})
+	path := "/radarr/jackett/api?t=search&q=Movie+Title+2024&limit=1&offset="
+	warm(t, server, path+"0")
+	if err := server.CacheRegistry().Invalidate(context.Background(), runtime.SonarrSearchTitle); err != nil {
+		t.Fatalf("Invalidate() error = %v", err)
+	}
+
+	// When
+	warm(t, server, path+"1")
+
+	// Then
+	if len(radarrQueries) != 2 || !strings.Contains(radarrQueries[1], "offset=1") || !strings.Contains(radarrQueries[1], "q=Movie+Title+2024") {
+		t.Fatalf("queries=%v", radarrQueries)
+	}
+}
+
 func runtimeSnapshot(radarr, sonarr string) sqlite.Snapshot {
 	return sqlite.Snapshot{Radarr: format.Config{Format: "{title}", Rules: []format.Rule{{Token: "title", Regex: ".*", Replacement: radarr}}}, Sonarr: format.SonarrConfig{Format: "{title}", Rules: []format.Rule{{Token: "title", Regex: ".*", Replacement: sonarr}}}}
 }

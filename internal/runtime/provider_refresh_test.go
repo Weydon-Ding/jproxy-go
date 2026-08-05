@@ -107,3 +107,21 @@ func TestProviderRefresh_serializesConcurrentInvalidations(t *testing.T) {
 		t.Fatalf("loads=%d revision=%d snapshot=%+v", loader.loads, snapshot.RadarrRevision, snapshot)
 	}
 }
+
+func TestProviderRefresh_doesNotPublish_whenContextCancelledImmediatelyBeforePublish(t *testing.T) {
+	// Given
+	loader := &testLoader{snapshot: testSnapshot("new")}
+	provider := NewProvider(testSnapshot("old"), loader).(*provider)
+	before := provider.Snapshot()
+	ctx, cancel := context.WithCancel(context.Background())
+	provider.beforePublish = cancel
+
+	// When
+	err := provider.Refresh(ctx, ScopeRadarrRules)
+
+	// Then
+	after := provider.Snapshot()
+	if !errors.Is(err, context.Canceled) || after.RadarrRevision != before.RadarrRevision || after.Radarr.Rules[0].Replacement != "old" {
+		t.Fatalf("err=%v before=%+v after=%+v", err, before, after)
+	}
+}

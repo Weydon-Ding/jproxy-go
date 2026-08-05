@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,18 @@ import (
 	"jproxy-go/internal/format"
 	"jproxy-go/internal/store/sqlite"
 )
+
+var ErrSnapshotRefresh = errors.New("runtime formatter snapshot refresh failed")
+
+type snapshotRefreshError struct{ cause error }
+
+func (e snapshotRefreshError) Error() string { return ErrSnapshotRefresh.Error() }
+
+func (e snapshotRefreshError) Is(target error) bool {
+	return target == ErrSnapshotRefresh || errors.Is(e.cause, target)
+}
+
+func (e snapshotRefreshError) Unwrap() error { return e.cause }
 
 type Scope uint8
 
@@ -24,11 +37,12 @@ const (
 const allScopes = ScopeSystemConfig | ScopeSonarrRules | ScopeSonarrTitles | ScopeRadarrRules | ScopeRadarrTitles
 
 type Snapshot struct {
-	Radarr         format.Config
-	Sonarr         format.SonarrConfig
-	RadarrRevision uint64
-	SonarrRevision uint64
-	SearchRevision uint64
+	Radarr               format.Config
+	Sonarr               format.SonarrConfig
+	RadarrRevision       uint64
+	SonarrRevision       uint64
+	RadarrSearchRevision uint64
+	SonarrSearchRevision uint64
 }
 
 type Loader interface {
@@ -41,9 +55,10 @@ type Provider interface {
 }
 
 type provider struct {
-	loader Loader
-	mu     sync.Mutex
-	value  atomic.Pointer[Snapshot]
+	loader        Loader
+	mu            sync.Mutex
+	value         atomic.Pointer[Snapshot]
+	beforePublish func()
 }
 
 func NewProvider(initial sqlite.Snapshot, loader Loader) Provider {
@@ -55,7 +70,17 @@ func NewProvider(initial sqlite.Snapshot, loader Loader) Provider {
 
 func NewStaticProvider(initial sqlite.Snapshot) Provider { return NewProvider(initial, nil) }
 
-func (p *provider) Snapshot() Snapshot { return *p.value.Load() }
+func (p *provider) Snapshot() Snapshot {
+	value := p.value.Load()
+	return Snapshot{
+		Radarr:               cloneRadarr(value.Radarr),
+		Sonarr:               cloneSonarr(value.Sonarr),
+		RadarrRevision:       value.RadarrRevision,
+		SonarrRevision:       value.SonarrRevision,
+		RadarrSearchRevision: value.RadarrSearchRevision,
+		SonarrSearchRevision: value.SonarrSearchRevision,
+	}
+}
 
 func (p *provider) Refresh(ctx context.Context, scopes Scope) error {
 	if scopes == 0 || p.loader == nil {
@@ -71,19 +96,22 @@ func (p *provider) Refresh(ctx context.Context, scopes Scope) error {
 	}
 	loaded, err := p.loader.LoadFormatterSnapshot(ctx)
 	if err != nil {
-		return fmt.Errorf("load runtime formatter snapshot: %w", err)
+		return snapshotRefreshError{cause: err}
+	}
+	current := p.Snapshot()
+	next := snapshotFromSQLite(loaded, current, scopes)
+	if p.beforePublish != nil {
+		p.beforePublish()
 	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("publish runtime formatter snapshot: %w", err)
 	}
-	current := p.Snapshot()
-	next := snapshotFromSQLite(loaded, current, scopes)
 	p.value.Store(&next)
 	return nil
 }
 
 func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope) Snapshot {
-	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, SearchRevision: previous.SearchRevision}
+	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision}
 	if scopes == allScopes {
 		next.Radarr = cloneRadarr(source.Radarr)
 		next.Sonarr = cloneSonarr(source.Sonarr)
@@ -114,8 +142,11 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 	if scopes&ScopeSonarrTitles != 0 {
 		next.Sonarr.Titles = cloneSonarr(source.Sonarr).Titles
 	}
-	if scopes&(ScopeRadarrTitles|ScopeSonarrTitles) != 0 {
-		next.SearchRevision++
+	if scopes&ScopeRadarrTitles != 0 {
+		next.RadarrSearchRevision++
+	}
+	if scopes&ScopeSonarrTitles != 0 {
+		next.SonarrSearchRevision++
 	}
 	return next
 }
