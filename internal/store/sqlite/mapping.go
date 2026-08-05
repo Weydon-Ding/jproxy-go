@@ -36,6 +36,25 @@ func loadSystemConfig(ctx context.Context, tx *sql.Tx, key string) (string, erro
 	return value, nil
 }
 
+func loadOptionalSystemConfig(ctx context.Context, tx *sql.Tx, key string) (string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT value FROM system_config WHERE key = ? AND valid_status = 1`, key)
+	if err != nil {
+		return "", fmt.Errorf("query optional system config %q: %w", key, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", rows.Err()
+	}
+	var value sql.NullString
+	if err := rows.Scan(&value); err != nil {
+		return "", fmt.Errorf("scan optional system config %q: %w", key, err)
+	}
+	if !value.Valid || rows.Next() {
+		return "", fmt.Errorf("invalid optional system config %q", key)
+	}
+	return value.String, rows.Err()
+}
+
 func loadRules(ctx context.Context, tx *sql.Tx, table string) ([]format.Rule, error) {
 	query := `SELECT token, COALESCE(priority, 1000), regex, COALESCE(replacement, ''), COALESCE(offset, 0) FROM ` + table + ` WHERE valid_status = 1 ORDER BY COALESCE(priority, 1000) ASC`
 	rows, err := tx.QueryContext(ctx, query)

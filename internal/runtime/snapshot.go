@@ -37,6 +37,8 @@ const allScopes = ScopeSystemConfig | ScopeSonarrRules | ScopeSonarrTitles | Sco
 type Snapshot struct {
 	Radarr               format.Config
 	Sonarr               format.SonarrConfig
+	JackettURL           string
+	ProwlarrURL          string
 	RadarrRevision       uint64
 	SonarrRevision       uint64
 	RadarrSearchRevision uint64
@@ -73,6 +75,8 @@ func (p *provider) Snapshot() Snapshot {
 	return Snapshot{
 		Radarr:               cloneRadarr(value.Radarr),
 		Sonarr:               cloneSonarr(value.Sonarr),
+		JackettURL:           value.JackettURL,
+		ProwlarrURL:          value.ProwlarrURL,
 		RadarrRevision:       value.RadarrRevision,
 		SonarrRevision:       value.SonarrRevision,
 		RadarrSearchRevision: value.RadarrSearchRevision,
@@ -127,6 +131,8 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 		next.Radarr.CleanTitleRegex = source.Radarr.CleanTitleRegex
 		next.Sonarr.Format = source.Sonarr.Format
 		next.Sonarr.CleanTitleRegex = source.Sonarr.CleanTitleRegex
+		next.JackettURL = source.JackettURL
+		next.ProwlarrURL = source.ProwlarrURL
 		next.RadarrRevision++
 		next.SonarrRevision++
 	}

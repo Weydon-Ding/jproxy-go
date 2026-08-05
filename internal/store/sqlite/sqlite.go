@@ -18,8 +18,10 @@ const busyTimeoutMilliseconds = 5000
 
 // Snapshot is the immutable formatter configuration read once during startup.
 type Snapshot struct {
-	Radarr format.Config
-	Sonarr format.SonarrConfig
+	Radarr      format.Config
+	Sonarr      format.SonarrConfig
+	JackettURL  string
+	ProwlarrURL string
 }
 
 // Load reads all active formatter records from an existing SQLite database.
@@ -115,6 +117,14 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	jackettURL, err := loadOptionalSystemConfig(ctx, tx, "jackettUrl")
+	if err != nil {
+		return Snapshot{}, err
+	}
+	prowlarrURL, err := loadOptionalSystemConfig(ctx, tx, "prowlarrUrl")
+	if err != nil {
+		return Snapshot{}, err
+	}
 	radarrRules, err := loadRules(ctx, tx, "radarr_rule")
 	if err != nil {
 		return Snapshot{}, err
@@ -133,7 +143,7 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	}
 	snapshot := Snapshot{
 		Radarr: format.Config{Format: radarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: radarrRules, Titles: radarrTitles},
-		Sonarr: format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles},
+		Sonarr: format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles}, JackettURL: jackettURL, ProwlarrURL: prowlarrURL,
 	}
 	if err := format.ValidateConfig(snapshot.Radarr); err != nil {
 		return Snapshot{}, fmt.Errorf("validate Radarr SQLite formatter snapshot: %w", err)
