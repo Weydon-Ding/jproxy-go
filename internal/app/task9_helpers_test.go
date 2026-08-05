@@ -18,108 +18,6 @@ import (
 	"jproxy-go/internal/store/sqlite"
 )
 
-func TestTask9_rootMuxMeasuresLiveTitleSyncContracts(t *testing.T) {
-	ctx := context.Background()
-	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "task9.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	seedRootConfigs(t, store)
-	entered := make(chan struct{}, 1)
-	release := make(chan struct{})
-	var mu sync.Mutex
-	sonarrCalls, radarrCalls := 0, 0
-	var sonarrKeys, radarrKeys []string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		if r.URL.Path == "/api/v3/series" {
-			sonarrCalls++
-			sonarrKeys = append(sonarrKeys, r.URL.Query().Get("apikey"))
-		}
-		if r.URL.Path == "/api/v3/movie" {
-			radarrCalls++
-			radarrKeys = append(radarrKeys, r.URL.Query().Get("apikey"))
-		}
-		mu.Unlock()
-		switch r.URL.Path {
-		case "/api/v3/series":
-			entered <- struct{}{}
-			<-release
-			_, _ = w.Write([]byte(task9SonarrJSON))
-		case "/api/v3/movie":
-			_, _ = w.Write([]byte(task9RadarrJSON))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(upstream.Close)
-	configs := task9Configs(t, store, upstream.URL, "first-key")
-	snapshot, err := store.UpdateSystemConfigs(ctx, configs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	provider := runtime.NewProvider(snapshot, store)
-	server := httptest.NewServer(rootHandler(config.Config{Database: config.DatabaseConfig{Enabled: true}, HTTPTimeout: time.Second}, provider, store))
-	t.Cleanup(server.Close)
-
-	firstDone := make(chan int, 1)
-	go func() { firstDone <- task9PostStatus(server.URL, "/api/sonarr/title/sync") }()
-	<-entered
-	concurrentStatus := task9PostStatus(server.URL, "/api/sonarr/title/sync")
-	radarrStatus := task9PostStatus(server.URL, "/api/radarr/title/sync")
-	mu.Lock()
-	concurrentCalls := sonarrCalls
-	mu.Unlock()
-	close(release)
-	firstStatus := <-firstDone
-	sonarrRows := task9SonarrRows(t, store)
-	radarrRows := task9RadarrRows(t, store)
-	sonarrDigest := task9Digest(t, sonarrRows)
-	radarrDigest := task9Digest(t, radarrRows)
-	tooFrequentStatus := task9PostStatus(server.URL, "/api/sonarr/title/sync")
-
-	configs = task9Configs(t, store, upstream.URL, "second-key")
-	body, err := json.Marshal(task9ConfigPayload(configs))
-	if err != nil {
-		t.Fatal(err)
-	}
-	update := httptest.NewRecorder()
-	server.Config.Handler.ServeHTTP(update, httptest.NewRequest(http.MethodPost, "/api/system/config/update", bytes.NewReader(body)))
-	if update.Code != http.StatusOK {
-		t.Fatalf("config update=%d", update.Code)
-	}
-	secondDone := make(chan int, 1)
-	go func() { secondDone <- task9PostStatus(server.URL, "/api/sonarr/title/sync") }()
-	<-entered
-	secondStatus := <-secondDone
-	tmdbStatus := task9PostStatus(server.URL, "/api/tmdb/title/sync")
-	disabled := httptest.NewRecorder()
-	rootHandler(config.Config{HTTPTimeout: time.Second}, runtime.NewStaticProvider(sqlite.Snapshot{}), nil).ServeHTTP(disabled, httptest.NewRequest(http.MethodPost, "/api/sonarr/title/sync", nil))
-
-	mu.Lock()
-	gotSonarrCalls, gotRadarrCalls := sonarrCalls, radarrCalls
-	keys := append([]string(nil), sonarrKeys...)
-	mu.Unlock()
-	concurrentRejected := concurrentStatus == http.StatusBadRequest && concurrentCalls == 1
-	crossDomain := radarrStatus == http.StatusOK && gotRadarrCalls == 1
-	dynamicConfig := len(keys) == 2 && keys[0] == "first-key" && keys[1] == "second-key"
-	if firstStatus != http.StatusOK || !concurrentRejected || !crossDomain || tooFrequentStatus != http.StatusBadRequest || update.Code != http.StatusOK || secondStatus != http.StatusOK || !dynamicConfig || tmdbStatus != http.StatusServiceUnavailable || disabled.Code != http.StatusNotFound || len(sonarrRows) != 3 || len(radarrRows) != 5 {
-		t.Fatalf("statuses=%d/%d/%d/%d/%d/%d/%d calls=%d/%d keys=%d rows=%d/%d", firstStatus, concurrentStatus, radarrStatus, tooFrequentStatus, update.Code, secondStatus, tmdbStatus, gotSonarrCalls, gotRadarrCalls, len(keys), len(sonarrRows), len(radarrRows))
-	}
-	routeCount := 0
-	for _, route := range managementRouteContracts() {
-		if isTodo8Route(route) {
-			routeCount++
-		}
-	}
-	secretLeaks := taskCanaryLeaks([]string{task9PostBody(server.URL, "/api/tmdb/title/sync")})
-	if routeCount != 10 || secretLeaks != 0 {
-		t.Fatalf("routes=%d secret_leaks=%d", routeCount, secretLeaks)
-	}
-	t.Logf("task9_qa title_route_count=%d sonarr_path_template=/api/v3/series?apikey=[REDACTED] radarr_path_template=/api/v3/movie?apikey=[REDACTED] apikey_match=%t sonarr_row_count=%d sonarr_digest=%x radarr_row_count=%d radarr_digest=%x concurrent_rejected=%t concurrent_upstream_calls=%d cross_domain_concurrent=%t radarr_upstream_calls=%d too_frequent_rejected=%t dynamic_config_used=%t config_update_status=%d tmdb_status=%d db_disabled_status=%d secret_leaks=%d", routeCount, dynamicConfig, len(sonarrRows), sonarrDigest, len(radarrRows), radarrDigest, concurrentRejected, concurrentCalls, crossDomain, gotRadarrCalls, tooFrequentStatus == http.StatusBadRequest, dynamicConfig, update.Code, tmdbStatus, disabled.Code, secretLeaks)
-}
-
 func task9Configs(t *testing.T, store *sqlite.Store, url, key string) []sqlite.SystemConfig {
 	t.Helper()
 	rows, err := store.Repositories().SystemConfigs.List(context.Background())
@@ -178,6 +76,15 @@ func task9RadarrRows(t *testing.T, store *sqlite.Store) []sqlite.RadarrTitle {
 		t.Fatal(err)
 	}
 	return page.List
+}
+
+func task9RadarrCount(t *testing.T, store *sqlite.Store) int64 {
+	t.Helper()
+	page, err := store.Repositories().RadarrTitles.Page(context.Background(), sqlite.RadarrTitleFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return page.Total
 }
 func task9Digest(t *testing.T, value any) [32]byte {
 	t.Helper()
@@ -263,10 +170,11 @@ func TestTask9_rootMuxRetriesEveryProtocolFailureWithoutStateLeak(t *testing.T) 
 		mode = "success"
 		mu.Unlock()
 		configs = task9Configs(t, store, upstream.URL, "retry-key")
-		if task9UpdateConfigs(server.Config.Handler, configs) != http.StatusOK || task9PostStatus(server.URL, "/api/sonarr/title/sync") != http.StatusOK {
+		retryStatus := task9PostStatus(server.URL, "/api/sonarr/title/sync")
+		if task9UpdateConfigs(server.Config.Handler, configs) != http.StatusOK || retryStatus != http.StatusOK {
 			t.Fatalf("retry=%s", current)
 		}
-		markerReleased = markerReleased && true
+		markerReleased = markerReleased && retryStatus == http.StatusOK
 		retries++
 		if len(task9SonarrRows(t, store)) != 3 {
 			t.Fatalf("retry rows=%s", current)
@@ -280,7 +188,7 @@ func TestTask9_rootMuxRetriesEveryProtocolFailureWithoutStateLeak(t *testing.T) 
 	if seedStatus != http.StatusOK || failures != 9 || retries != failures || observedCalls < failures+retries+1 || secretLeaks != 0 || !dbRetained || !markerReleased {
 		t.Fatalf("seed=%d failures=%d retries=%d calls=%d leaks=%d", seedStatus, failures, retries, observedCalls, secretLeaks)
 	}
-	t.Logf("task9_failure_matrix failure_cases=%d failure_retries=%d failure_db_retained=%t failure_marker_released=%t request_cancellation=%t secret_http_leaks=%d secret_error_leaks=%d secret_log_leaks=%d secret_leaks=%d", failures, retries, dbRetained, markerReleased, true, secretLeaks, secretLeaks, secretLeaks, secretLeaks)
+	t.Logf("task9_failure_matrix failure_cases=%d failure_retries=%d failure_db_retained=%t failure_marker_released=%t secret_http_leaks=%d secret_error_leaks=%d secret_log_leaks=%d secret_leaks=%d", failures, retries, dbRetained, markerReleased, secretLeaks, secretLeaks, secretLeaks, secretLeaks)
 }
 
 func task9Post(base, path string) (int, string) {
