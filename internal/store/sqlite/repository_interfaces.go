@@ -23,6 +23,9 @@ type SonarrRuleRepository interface {
 	DeleteBatch(context.Context, RuleIDs) error
 	SwitchValidStatus(context.Context, RuleIDs, ValidStatus) error
 	Replace(context.Context, SonarrRuleBatch) error
+	Export(context.Context, RuleIDs) ([]SonarrRule, error)
+	Tokens(context.Context) ([]string, error)
+	Import(context.Context, SonarrRuleBatch) error
 }
 type RadarrRuleRepository interface {
 	Get(context.Context, RuleID) (RadarrRule, error)
@@ -33,6 +36,9 @@ type RadarrRuleRepository interface {
 	DeleteBatch(context.Context, RuleIDs) error
 	SwitchValidStatus(context.Context, RuleIDs, ValidStatus) error
 	Replace(context.Context, RadarrRuleBatch) error
+	Export(context.Context, RuleIDs) ([]RadarrRule, error)
+	Tokens(context.Context) ([]string, error)
+	Import(context.Context, RadarrRuleBatch) error
 }
 type SonarrExampleRepository interface {
 	Page(context.Context, ExampleFilter) (PageResult[SonarrExample], error)

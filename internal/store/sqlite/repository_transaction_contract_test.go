@@ -53,5 +53,7 @@ func (transactionFake) DeleteRadarrExamples(context.Context, sqlite.ExampleIDs) 
 func (transactionFake) ReplaceRadarrExamples(context.Context, sqlite.RadarrExampleBatch) error {
 	return nil
 }
+func (transactionFake) ImportSonarrRules(context.Context, sqlite.SonarrRuleBatch) error { return nil }
+func (transactionFake) ImportRadarrRules(context.Context, sqlite.RadarrRuleBatch) error { return nil }
 
 var _ sqlite.DatasetTransaction = transactionFake{}

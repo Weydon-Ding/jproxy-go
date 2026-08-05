@@ -23,6 +23,8 @@ type DatasetTransaction interface {
 	DeleteRadarrRules(context.Context, RuleIDs) error
 	SwitchRadarrRuleStatus(context.Context, RuleIDs, ValidStatus) error
 	ReplaceRadarrRules(context.Context, RadarrRuleBatch) error
+	ImportSonarrRules(context.Context, SonarrRuleBatch) error
+	ImportRadarrRules(context.Context, RadarrRuleBatch) error
 	UpsertSonarrTitles(context.Context, SonarrTitleBatch) error
 	DeleteSonarrTitles(context.Context, SonarrTitleIDs) error
 	ReplaceSonarrTitles(context.Context, SonarrTitleBatch) error
