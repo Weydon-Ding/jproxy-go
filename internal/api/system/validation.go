@@ -10,7 +10,7 @@ import (
 const maxValueLength = 16 * 1024
 
 func validateValue(key, value string) (string, error) {
-	if len(value) > maxValueLength || strings.ContainsAny(value, "\r\n\x00") {
+	if len(value) > maxValueLength || hasControl(value) {
 		return "", fmt.Errorf("invalid config value")
 	}
 	switch key {
@@ -52,15 +52,27 @@ func normalizeURL(value string, transmission bool) (string, error) {
 	return value, nil
 }
 
+func hasControl(value string) bool {
+	for _, character := range value {
+		if character < 0x20 || character == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeAuthors(value string) (string, error) {
 	items := strings.Split(value, ",")
 	seen := make(map[string]bool, len(items))
 	for index := range items {
 		items[index] = strings.TrimSpace(items[index])
-		if items[index] == "" || seen[items[index]] || len(items[index]) > 128 {
+		if items[index] == "" || seen[items[index]] || len(items[index]) > 128 || hasControl(items[index]) || strings.Contains(items[index], "/") {
 			return "", fmt.Errorf("invalid authors")
 		}
 		seen[items[index]] = true
+	}
+	if seen["ALL"] && len(items) != 1 {
+		return "", fmt.Errorf("invalid authors")
 	}
 	return strings.Join(items, ","), nil
 }

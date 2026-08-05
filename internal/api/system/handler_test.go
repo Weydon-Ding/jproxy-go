@@ -32,7 +32,7 @@ func TestHandler_servesRawConfigAndRejectsWrongMethod(t *testing.T) {
 	handler.ServeHTTP(wrongMethodResponse, wrongMethod)
 
 	// Then
-	if queryResponse.Code != http.StatusOK || queryResponse.Header().Get("Content-Type") != "application/json" {
+	if queryResponse.Code != http.StatusOK || queryResponse.Header().Get("Content-Type") != "application/json; charset=utf-8" {
 		t.Fatalf("query status=%d content-type=%q", queryResponse.Code, queryResponse.Header().Get("Content-Type"))
 	}
 	var rows []map[string]any

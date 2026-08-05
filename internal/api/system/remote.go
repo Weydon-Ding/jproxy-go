@@ -11,8 +11,21 @@ import (
 
 const remoteBodyLimit = 64 * 1024
 
+const (
+	defaultVersionURL      = "https://api.github.com/repos/LuckyPuppy514/jproxy/releases/latest"
+	defaultAuthorURL       = "https://raw.githubusercontent.com/LuckyPuppy514/jproxy/master/rule"
+	defaultAuthorBackupURL = "https://raw.githubusercontent.com/LuckyPuppy514/jproxy/main/rule"
+)
+
 func (h *Handler) authorList() []string {
-	for _, source := range []string{h.options.AuthorURL, h.options.AuthorBackupURL} {
+	primary, backup := h.options.AuthorURL, h.options.AuthorBackupURL
+	if primary == "" {
+		primary = defaultAuthorURL
+	}
+	if backup == "" {
+		backup = defaultAuthorBackupURL
+	}
+	for _, source := range []string{primary, backup} {
 		if authors, ok := fetchAuthors(source); ok {
 			return authors
 		}

@@ -18,13 +18,18 @@ import (
 const maxBodyBytes = 256 * 1024
 
 type Options struct {
-	Store           *sqlite.Store
+	Store           Store
 	Provider        runtime.Provider
 	Registry        *runtime.Registry
 	Version         string
 	VersionURL      string
 	AuthorURL       string
 	AuthorBackupURL string
+}
+
+type Store interface {
+	Repositories() sqlite.Repositories
+	UpdateSystemConfigs(context.Context, []sqlite.SystemConfig) (sqlite.Snapshot, error)
 }
 
 type Handler struct {
@@ -50,7 +55,8 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		h.clear(writer, request)
 	default:
 		if isSystemPath(request.URL.Path) {
-			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+			writer.Header().Set("Allow", allowedMethod(request.URL.Path))
+			writeError(writer, http.StatusMethodNotAllowed)
 			return
 		}
 		http.NotFound(writer, request)
@@ -59,14 +65,26 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 func isSystemPath(path string) bool { return len(path) >= 12 && path[:12] == "/api/system/" }
 
+func allowedMethod(path string) string {
+	if path == "/api/system/config/version" || path == "/api/system/config/query" || path == "/api/system/config/author/list" {
+		return http.MethodGet
+	}
+	return http.MethodPost
+}
+
 func (h *Handler) version(writer http.ResponseWriter) {
 	version := h.options.Version
 	if version == "" {
 		version = "dev"
 	}
-	if latest, ok := fetchVersion(h.options.VersionURL); ok && latest != version {
+	source := h.options.VersionURL
+	if source == "" {
+		source = defaultVersionURL
+	}
+	if latest, ok := fetchVersion(source); ok && latest != version {
 		version += " 🚨"
 	}
+	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = writer.Write([]byte(version))
 }
 
@@ -196,10 +214,12 @@ func statusFor(err error) int {
 	return http.StatusInternalServerError
 }
 func writeError(writer http.ResponseWriter, status int) {
-	http.Error(writer, http.StatusText(status), status)
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
+	_, _ = writer.Write([]byte(`{"error":"request failed"}`))
 }
 func writeJSON(writer http.ResponseWriter, status int, value any) {
-	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(value)
 }
