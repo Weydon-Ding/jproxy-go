@@ -3,9 +3,6 @@ package sqlite
 import "context"
 
 func (t datasetTransaction) UpsertSonarrRules(ctx context.Context, batch SonarrRuleBatch) error {
-	if len(batch.Rows) > batchLimit {
-		return ErrBatchTooLarge
-	}
 	inputs := make([]SonarrRuleInput, len(batch.Rows))
 	for index, row := range batch.Rows {
 		inputs[index] = SonarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}
@@ -54,9 +51,6 @@ func (t datasetTransaction) ReplaceSonarrRules(ctx context.Context, batch Sonarr
 }
 
 func (t datasetTransaction) UpsertRadarrRules(ctx context.Context, batch RadarrRuleBatch) error {
-	if len(batch.Rows) > batchLimit {
-		return ErrBatchTooLarge
-	}
 	inputs := make([]RadarrRuleInput, len(batch.Rows))
 	for index, row := range batch.Rows {
 		inputs[index] = RadarrRuleInput{Rule: row, ValidStatus: &row.ValidStatus}
@@ -65,9 +59,15 @@ func (t datasetTransaction) UpsertRadarrRules(ctx context.Context, batch RadarrR
 }
 
 func (t datasetTransaction) ImportSonarrRules(ctx context.Context, batch SonarrRuleBatch) error {
+	if len(batch.Rows) > batchLimit {
+		return ErrBatchTooLarge
+	}
 	return t.UpsertSonarrRules(ctx, batch)
 }
 func (t datasetTransaction) ImportRadarrRules(ctx context.Context, batch RadarrRuleBatch) error {
+	if len(batch.Rows) > batchLimit {
+		return ErrBatchTooLarge
+	}
 	return t.UpsertRadarrRules(ctx, batch)
 }
 
