@@ -189,6 +189,9 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 
 func rootHandler(cfg config.Config, provider runtime.Provider, store system.Store) http.Handler {
 	proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
+	if !cfg.Database.Enabled {
+		return proxyServer.Routes()
+	}
 	root := http.NewServeMux()
 	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: proxyServer.CacheRegistry()}))
 	root.Handle("/", proxyServer.Routes())
