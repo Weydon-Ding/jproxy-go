@@ -21,11 +21,18 @@ type Syncer interface {
 	Sync(context.Context) (SyncResult, error)
 }
 type Store interface{ Repositories() sqlite.Repositories }
+
+type MultipartObserver interface {
+	ObservePartRead()
+	ObserveFilesystemOperation()
+}
+
 type Options struct {
-	Store      Store
-	Domain     string
-	Invalidate func(context.Context, string) error
-	Syncer     Syncer
+	Store             Store
+	Domain            string
+	Invalidate        func(context.Context, string) error
+	Syncer            Syncer
+	MultipartObserver MultipartObserver
 }
 type Handler struct{ options Options }
 

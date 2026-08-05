@@ -27,6 +27,9 @@ func (h *Handler) importRules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400)
 		return
 	}
+	if h.options.MultipartObserver != nil {
+		h.options.MultipartObserver.ObservePartRead()
+	}
 	var rows []ruleDTO
 	d := json.NewDecoder(io.LimitReader(p, maxBodyBytes+1))
 	d.DisallowUnknownFields()
