@@ -60,11 +60,26 @@ func TestTask8_rootSurfaceMeasurements(t *testing.T) {
 	if !suppliedIDUpdated {
 		t.Fatalf("supplied=%+v error=%v", updatedRows, err)
 	}
-	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"tvdbId":200,"tmdbId":700,"language":"en","title":"Reusable","validStatus":1}`, http.StatusOK)
+	firstTMDBID, secondTMDBID := int64(701), int64(702)
+	if err := store.Repositories().TMDBTitles.Upsert(ctx, sqlite.TMDBTitle{ID: 100, TVDBID: 200, TMDBID: &firstTMDBID, Language: "en", Title: "First", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Repositories().TMDBTitles.Upsert(ctx, sqlite.TMDBTitle{ID: 200, TVDBID: 200, TMDBID: &secondTMDBID, Language: "en", Title: "Second", ValidStatus: sqlite.Valid}); err != nil {
+		t.Fatal(err)
+	}
 	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"tvdbId":200,"language":"en","title":"Reuse target","validStatus":1}`, http.StatusOK)
 	reusedRows, err := store.Repositories().TMDBTitles.FindByTVDBID(ctx, 200)
-	tmdbIDReused := err == nil && len(reusedRows) == 2 && reusedRows[0].TMDBID != nil && reusedRows[1].TMDBID != nil && *reusedRows[0].TMDBID == 700 && *reusedRows[1].TMDBID == 700
-	if !tmdbIDReused {
+	reuseCandidates := 2
+	reusedSourceID := int64(100)
+	var reuseTarget sqlite.TMDBTitle
+	for _, row := range reusedRows {
+		if row.Title == "Reuse target" {
+			reuseTarget = row
+			break
+		}
+	}
+	tmdbIDReusedAscending := err == nil && len(reusedRows) == 3 && reuseTarget.TMDBID != nil && *reuseTarget.TMDBID == firstTMDBID && *reuseTarget.TMDBID != reusedSourceID
+	if !tmdbIDReusedAscending {
 		t.Fatalf("reused=%+v error=%v", reusedRows, err)
 	}
 	postRoot(t, mux.URL, "/api/tmdb/title/save", `{"tvdbId":300,"language":"en","title":"No reuse","validStatus":1}`, http.StatusOK)
@@ -93,46 +108,10 @@ func TestTask8_rootSurfaceMeasurements(t *testing.T) {
 	if !projectionDBHashUnchanged {
 		t.Fatal("projection changed tmdb rows")
 	}
-	sonarrClean := "sonarr"
-	if err := store.Repositories().SonarrTitles.Upsert(ctx, sqlite.SonarrTitle{ID: 1, TVDBID: 1, MainTitle: "Sonarr", Title: "Sonarr", CleanTitle: &sonarrClean, SeasonNumber: 1, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Repositories().RadarrTitles.Upsert(ctx, sqlite.RadarrTitle{ID: 1, TMDBID: 1, MainTitle: "Radarr", Title: "Radarr", Year: 2026, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid}); err != nil {
-		t.Fatal(err)
-	}
-	results.Set("result", "value")
-	offsets.Set("offset", []int{1})
-	beforeSonarr := provider.Snapshot()
-	beforeSonarrCache := cacheState(results, offsets, markers)
-	postRoot(t, mux.URL, "/api/sonarr/title/remove", `[1]`, http.StatusOK)
-	afterSonarr := provider.Snapshot()
-	afterSonarrCache := cacheState(results, offsets, markers)
-	sonarrInvalidationIsolated := afterSonarr.SonarrRevision > beforeSonarr.SonarrRevision && afterSonarr.RadarrRevision == beforeSonarr.RadarrRevision && afterSonarrCache == 2
-	if !sonarrInvalidationIsolated {
-		t.Fatal("sonarr invalidation was not isolated")
-	}
-	results.Set("result", "value")
-	offsets.Set("offset", []int{1})
-	beforeRadarr := provider.Snapshot()
-	beforeRadarrCache := cacheState(results, offsets, markers)
-	postRoot(t, mux.URL, "/api/radarr/title/remove", `[1]`, http.StatusOK)
-	afterRadarr := provider.Snapshot()
-	afterRadarrCache := cacheState(results, offsets, markers)
-	radarrInvalidationIsolated := afterRadarr.RadarrRevision > beforeRadarr.RadarrRevision && afterRadarr.SonarrRevision == beforeRadarr.SonarrRevision && afterRadarrCache == 2
-	if !radarrInvalidationIsolated {
-		t.Fatal("radarr invalidation was not isolated")
-	}
-	results.Set("result", "value")
-	offsets.Set("offset", []int{1})
-	beforeTMDB := provider.Snapshot()
-	beforeTMDBCache := cacheState(results, offsets, markers)
-	postRoot(t, mux.URL, "/api/tmdb/title/remove", `[`+strconv.FormatInt(int64(noReuseRows[0].ID), 10)+`]`, http.StatusOK)
-	afterTMDB := provider.Snapshot()
-	afterTMDBCache := cacheState(results, offsets, markers)
-	tmdbInvalidationIsolated := afterTMDB.SonarrRevision > beforeTMDB.SonarrRevision && afterTMDB.RadarrRevision == beforeTMDB.RadarrRevision && afterTMDBCache == 2
-	if !tmdbInvalidationIsolated {
-		t.Fatal("tmdb invalidation was not isolated")
-	}
+	invalidation := newTask8InvalidationFixture(t, store, provider, results, offsets, markers, mux.URL, noReuseRows[0].ID)
+	sonarrObservation := invalidation.measureSonarr(t)
+	radarrObservation := invalidation.measureRadarr(t)
+	tmdbObservation := invalidation.measureTMDB(t)
 	responses := make([]string, 0, 3)
 	unavailableSyncs := 0
 	beforeSync := provider.Snapshot()
@@ -155,7 +134,7 @@ func TestTask8_rootSurfaceMeasurements(t *testing.T) {
 	if retained != 3 || canaryLeaks != 0 || !pageFieldsExact || !syncIsolated {
 		t.Fatalf("markers=%d canary_leaks=%d", retained, canaryLeaks)
 	}
-	t.Logf("task8_qa route_count=%d db_rows_before=%x generated_id=%t supplied_id_updated=%t tmdb_id_reused=%t tmdb_id_no_reuse_null=%t projection_db_hash_unchanged=%t projection_hash=%x page_fields_exact=%t sonarr_invalidation_isolated=%t radarr_invalidation_isolated=%t tmdb_invalidation_isolated=%t sonarr_revision_delta=%d radarr_revision_delta=%d tmdb_sonarr_revision_delta=%d sonarr_cache_delta=%d radarr_cache_delta=%d tmdb_cache_delta=%d unavailable_syncs=%d markers_retained=%d canary_leaks=%d", routeCount, beforeRows, generatedID, suppliedIDUpdated, tmdbIDReused, tmdbIDNoReuseNull, projectionDBHashUnchanged, afterProjection, pageFieldsExact, sonarrInvalidationIsolated, radarrInvalidationIsolated, tmdbInvalidationIsolated, afterSonarr.SonarrRevision-beforeSonarr.SonarrRevision, afterRadarr.RadarrRevision-beforeRadarr.RadarrRevision, afterTMDB.SonarrRevision-beforeTMDB.SonarrRevision, afterSonarrCache-beforeSonarrCache, afterRadarrCache-beforeRadarrCache, afterTMDBCache-beforeTMDBCache, unavailableSyncs, retained, canaryLeaks)
+	t.Logf("task8_qa route_count=%d db_rows_before=%x generated_id=%t supplied_id_updated=%t reuse_candidates=%d reused_source_id=%d tmdb_id_reused_ascending=%t tmdb_id_no_reuse_null=%t projection_db_hash_unchanged=%t projection_hash=%x page_fields_exact=%t %s %s %s unavailable_syncs=%d markers_retained=%d canary_leaks=%d", routeCount, beforeRows, generatedID, suppliedIDUpdated, reuseCandidates, reusedSourceID, tmdbIDReusedAscending, tmdbIDNoReuseNull, projectionDBHashUnchanged, afterProjection, pageFieldsExact, sonarrObservation.String("sonarr"), radarrObservation.String("radarr"), tmdbObservation.String("tmdb"), unavailableSyncs, retained, canaryLeaks)
 }
 
 func task8RootMuxWithRegistry(store managementStore, provider runtime.Provider, registry *runtime.Registry) http.Handler {
