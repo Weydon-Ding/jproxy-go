@@ -113,8 +113,8 @@ func TestHandler_removesTitlesAndRejectsUnavailableSync(t *testing.T) {
 		t.Fatalf("removed page = %#v, error = %v", page, err)
 	}
 	response = request(handler, http.MethodPost, "/api/tmdb/title/sync", nil)
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("sync status = %d, want %d", response.Code, http.StatusNotFound)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("sync status = %d, want %d", response.Code, http.StatusServiceUnavailable)
 	}
 	response = request(handler, http.MethodGet, "/api/tmdb/title/remove", nil)
 	if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != http.MethodPost {

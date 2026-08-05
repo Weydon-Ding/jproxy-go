@@ -2,6 +2,7 @@ package title
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -11,10 +12,27 @@ import (
 
 type Store interface{ Repositories() sqlite.Repositories }
 
+var ErrSyncUnavailable = errors.New("title sync unavailable")
+
+type SyncResult uint8
+
+const (
+	SyncSucceeded SyncResult = iota
+	SyncTooFrequent
+)
+
+type Syncer interface {
+	Sync(context.Context) (SyncResult, error)
+}
+
 type Options struct {
-	Store      Store
-	Provider   runtime.Provider
-	Invalidate func(context.Context, ...string) error
+	Store        Store
+	Provider     runtime.Provider
+	Invalidate   func(context.Context, ...string) error
+	DeleteMarker func(string) error
+	SonarrSyncer Syncer
+	RadarrSyncer Syncer
+	TMDBSyncer   Syncer
 }
 
 type Handler struct{ options Options }
@@ -28,16 +46,22 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		h.querySonarr(writer, request)
 	case http.MethodPost + " sonarr/title/remove":
 		h.removeSonarr(writer, request)
+	case http.MethodPost + " sonarr/title/sync":
+		h.sync(writer, request, syncSpec{syncer: h.options.SonarrSyncer, marker: runtime.SonarrTitleSyncInterval, invalidation: sonarrInvalidation})
 	case http.MethodGet + " radarr/title/query":
 		h.queryRadarr(writer, request)
 	case http.MethodPost + " radarr/title/remove":
 		h.removeRadarr(writer, request)
+	case http.MethodPost + " radarr/title/sync":
+		h.sync(writer, request, syncSpec{syncer: h.options.RadarrSyncer, marker: runtime.RadarrTitleSyncInterval, invalidation: radarrInvalidation})
 	case http.MethodGet + " tmdb/title/query":
 		h.queryTMDB(writer, request)
 	case http.MethodPost + " tmdb/title/remove":
 		h.removeTMDB(writer, request)
 	case http.MethodPost + " tmdb/title/save":
 		h.saveTMDB(writer, request)
+	case http.MethodPost + " tmdb/title/sync":
+		h.sync(writer, request, syncSpec{syncer: h.options.TMDBSyncer, marker: runtime.TMDBTitleSyncInterval, invalidation: sonarrInvalidation})
 	default:
 		if method := allowedMethod(path); method != "" {
 			writer.Header().Set("Allow", method)
@@ -52,7 +76,7 @@ func allowedMethod(path string) string {
 	switch path {
 	case "sonarr/title/query", "radarr/title/query", "tmdb/title/query":
 		return http.MethodGet
-	case "sonarr/title/remove", "radarr/title/remove", "tmdb/title/remove", "tmdb/title/save":
+	case "sonarr/title/remove", "sonarr/title/sync", "radarr/title/remove", "radarr/title/sync", "tmdb/title/remove", "tmdb/title/save", "tmdb/title/sync":
 		return http.MethodPost
 	default:
 		return ""
