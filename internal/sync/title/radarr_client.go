@@ -5,9 +5,9 @@ import (
 	"fmt"
 )
 
-type RadarrClient struct{ request requestClient }
+type RadarrClient struct{ request RequestClient }
 
-func NewRadarrClient(request requestClient) RadarrClient { return RadarrClient{request: request} }
+func NewRadarrClient(request RequestClient) RadarrClient { return RadarrClient{request: request} }
 func (c RadarrClient) Fetch(ctx context.Context, cfg providerConfig) ([]RadarrMovie, error) {
 	body, err := c.request.get(ctx, "radarr", "movie", cfg, "api", "v3", "movie")
 	if err != nil {

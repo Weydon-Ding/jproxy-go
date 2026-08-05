@@ -35,26 +35,26 @@ func (e *HTTPError) Error() string {
 
 func (e *HTTPError) Unwrap() error { return e.err }
 
-type requestClient struct {
+type RequestClient struct {
 	client  *http.Client
 	timeout time.Duration
 }
 
-func newRequestClient(client *http.Client, timeout time.Duration) requestClient {
+func newRequestClient(client *http.Client, timeout time.Duration) RequestClient {
 	if client == nil {
 		client = &http.Client{}
 	}
 	clone := *client
 	clone.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
-	return requestClient{client: &clone, timeout: timeout}
+	return RequestClient{client: &clone, timeout: timeout}
 }
 
 // NewRequestClient creates a bounded title-sync request client that rejects redirects.
-func NewRequestClient(client *http.Client, timeout time.Duration) requestClient {
+func NewRequestClient(client *http.Client, timeout time.Duration) RequestClient {
 	return newRequestClient(client, timeout)
 }
 
-func (c requestClient) get(ctx context.Context, provider, operation string, cfg providerConfig, parts ...string) ([]byte, error) {
+func (c RequestClient) get(ctx context.Context, provider, operation string, cfg providerConfig, parts ...string) ([]byte, error) {
 	requestContext, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	endpoint := *cfg.baseURL.JoinPath(parts...)

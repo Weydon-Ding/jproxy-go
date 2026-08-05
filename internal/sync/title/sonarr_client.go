@@ -5,9 +5,9 @@ import (
 	"fmt"
 )
 
-type SonarrClient struct{ request requestClient }
+type SonarrClient struct{ request RequestClient }
 
-func NewSonarrClient(request requestClient) SonarrClient { return SonarrClient{request: request} }
+func NewSonarrClient(request RequestClient) SonarrClient { return SonarrClient{request: request} }
 
 func (c SonarrClient) Fetch(ctx context.Context, cfg providerConfig) ([]SonarrSeries, error) {
 	body, err := c.request.get(ctx, "sonarr", "series", cfg, "api", "v3", "series")
