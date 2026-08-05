@@ -37,10 +37,10 @@ mapping. All Java management routes are pending migration unless noted otherwise
 
 | Controller | Java route | Java method | Status in Go | Planned migration |
 | --- | --- | --- | --- | --- |
-| `SystemConfigController` | `GET /api/system/config/version` | `version` | Implemented in Go | DB mode only; local version is always available and optional bounded GitHub lookup appends ` 🚨` on a different valid tag. |
+| `SystemConfigController` | `GET /api/system/config/version` | `version` | Implemented in Go | DB mode only; `debug.ReadBuildInfo().Main.Version` is used except empty/`(devel)` becomes `dev`; a bounded request-context GitHub latest-release lookup appends ` 🚨` on a different valid tag. |
 | `SystemConfigController` | `GET /api/system/config/query` | `query` | Intentional difference | DB mode only; returns the raw ID-sorted array and deliberately has no Java rename-task side effect. |
-| `SystemConfigController` | `POST /api/system/config/update` | `update` | Implemented in Go | DB mode only; strict complete 20-row update, structural validation, one SQLite transaction and prepared runtime publication. |
-| `SystemConfigController` | `GET /api/system/config/author/list` | `listAuthor` | Implemented in Go | DB mode only; primary then backup bounded fetch, otherwise `LuckyPuppy514`. |
+| `SystemConfigController` | `POST /api/system/config/update` | `update` | Implemented in Go | DB mode only; strict complete 20-row update, Java formatter token sets, one SQLite transaction and one prepared publication of formatter plus current Jackett/Prowlarr upstream URLs. |
+| `SystemConfigController` | `GET /api/system/config/author/list` | `listAuthor` | Implemented in Go | DB mode only; every request attempts Java production primary `https://raw.githubusercontent.com/LuckyPuppy514/jproxy/main/src/main/resources/rule/author.json`, then backup `https://github.rn.lckp.top/LuckyPuppy514/jproxy/main/src/main/resources/rule/author.json`, otherwise `LuckyPuppy514`. |
 | `SystemCacheController` | `POST /api/system/cache/clearAll` | `clearAll` | Implemented in Go | DB mode only; refreshes the provider before clearing current named caches. |
 | `SystemCacheController` | `POST /api/system/cache/clear` | `clear` | Implemented in Go | DB mode only; unknown or blank names are strict 400 with no effects. |
 | `SystemUserController` | `POST /api/system/user/login` | `login` | Pending migration | Todo 11 |
@@ -91,7 +91,7 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `IndexerServiceImpl` and Sonarr/Radarr Jackett/Prowlarr descendants | upstream URL/path rewrite, query forwarding, API-key-insensitive result key, offset key, offset tracking, request execution | Implemented in Go | The current Go test baseline locks all four proxy families, API-key key behavior, non-2xx/timeout handling, XML merge/trim, and caches. |
 | `IndexerServiceImpl.getSearchTitle` | base implementation returns an empty list | Intentional difference | Go includes MVP basic Sonarr/Radarr expansion; data-backed title/alias expansion is Todo 10. |
 | `IndexerServiceImpl.executeFormatRule` | base implementation returns XML unchanged | Intentional difference | Go uses opt-in static formatting before cache insertion; disabled formatters preserve bytes. Full Java rule behavior is Todo 7/10. |
-| `SystemConfigServiceImpl` | config query/value lookup/update | Implemented in Go | Update accepts only the active fixed ID/key set, validates structurally without remote Sonarr/Radarr/TMDB/downloader calls, and uses Go RE2 rather than Java regex. |
+| `SystemConfigServiceImpl` | config query/value lookup/update | Implemented in Go | Update accepts only the active fixed ID/key set, validates structurally without remote Sonarr/Radarr/TMDB/downloader calls, and uses Go RE2 rather than Java regex. Sonarr requires `{title}`, `{season}`, `{episode}`; Radarr requires `{title}`, `{year}`. Language and author values intentionally retain Java-accepted forms except global size/control safety checks. |
 | `SystemCacheServiceImpl` | named cache clear and clear-all | Implemented in Go | DB-only management surface; token auth caches remain unavailable until Todo 11. |
 | `SonarrRuleServiceImpl` / `RadarrRuleServiceImpl` | rule query/page/sync/validity switch | Pending migration | Todo 7 and Todo 10 for remote sync. |
 | `SonarrExampleServiceImpl` / `RadarrExampleServiceImpl` | example CRUD and formatter examples | Pending migration | Todo 7. |

@@ -37,7 +37,19 @@ Implemented:
   400, validate only local structure (including Go RE2 compilation), commit the
   SQLite rows and formatter snapshot together, then publish that prepared
   snapshot without another DB or network read. Query is intentionally
-  side-effect free: unlike Java it never runs rename work.
+  side-effect free: unlike Java it never runs rename work. A committed complete
+  configuration update also publishes the currently implemented proxy
+  dependencies, `jackettUrl` and `prowlarrUrl`, in that same immutable request
+  snapshot. The next proxy request uses both new values; formatter and
+  result-cache revisions advance together. Other persisted service settings
+  remain future-Todo data and do not construct clients yet. Sonarr templates
+  require `{title}`, `{season}`, and `{episode}`; Radarr templates require
+  `{title}` and `{year}`, matching Java `CheckUtil`. Language and author strings
+  retain Java-compatible values except for the global string-size and
+  control-character boundary checks. Version checks use the build's local
+  version and a bounded request-context remote fetch. Author fallback starts
+  with Java production primary on every request, then uses its configured backup
+  only when primary is invalid.
 
 ## Formatter payload selection
 
