@@ -79,4 +79,16 @@ func TestAuthorList_retriesPrimaryThenBackupOnEveryRequest(t *testing.T) {
 	if primaryHits.Load() != 2 || backupHits.Load() != 2 {
 		t.Fatalf("primary=%d backup=%d", primaryHits.Load(), backupHits.Load())
 	}
+	t.Logf("task6_remote_fallback primary=%d backup=%d default=false", primaryHits.Load(), backupHits.Load())
+}
+
+func TestAuthorList_returnsDefaultAfterBothSourcesFail(t *testing.T) {
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) }))
+	defer failing.Close()
+	handler := NewHandler(Options{AuthorURL: failing.URL, AuthorBackupURL: failing.URL})
+	authors := handler.authorList(context.Background())
+	if len(authors) != 1 || authors[0] != "LuckyPuppy514" {
+		t.Fatalf("authors=%v", authors)
+	}
+	t.Log("task6_remote_fallback primary=true backup=true default=true")
 }
