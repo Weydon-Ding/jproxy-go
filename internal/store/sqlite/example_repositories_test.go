@@ -2,10 +2,42 @@ package sqlite
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestExampleRepositories_preserveEmptyLines_whenBatchUpsertsJavaSplitRows(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "empty-lines.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	rows := []SonarrExample{{Hash: exampleHash("a"), OriginalText: "a", ValidStatus: Invalid}, {Hash: exampleHash(""), OriginalText: "", ValidStatus: Invalid}, {Hash: exampleHash("b"), OriginalText: "b", ValidStatus: Invalid}}
+	if err := store.Repositories().SonarrExamples.UpsertBatch(ctx, SonarrExampleBatch{Rows: rows}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := store.Repositories().SonarrExamples.Page(ctx, ExampleFilter{Page: PageInput{Current: 1, Size: 10}})
+	if err != nil || page.Total != 3 {
+		t.Fatalf("page=%+v err=%v", page, err)
+	}
+	for _, row := range page.List {
+		if row.Hash == "D41D8CD98F00B204E9800998ECF8427E" && row.OriginalText == "" {
+			return
+		}
+	}
+	t.Fatal("empty Java split row was not preserved")
+}
+
+func exampleHash(text string) string {
+	sum := md5.Sum([]byte(text))
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
+}
 
 func TestExampleRepositories_pageUpsertDeleteAndRollback_whenRowsAreManaged(t *testing.T) {
 	ctx := context.Background()

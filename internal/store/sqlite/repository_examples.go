@@ -125,8 +125,8 @@ func (r radarrExampleRepo) Replace(ctx context.Context, batch RadarrExampleBatch
 }
 
 func validateExample(row SonarrExample) error {
-	if row.Hash == "" || row.OriginalText == "" {
-		return fmt.Errorf("example hash and original text are required")
+	if row.Hash == "" {
+		return fmt.Errorf("example hash is required")
 	}
 	return validStatus(row.ValidStatus)
 }
