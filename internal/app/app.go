@@ -160,13 +160,11 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 
 	handler := deps.newHandler(cfg, provider)
 	if cfg.Database.Enabled {
-		if concreteStore, ok := store.(*sqlite.Store); ok {
-			proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
-			root := http.NewServeMux()
-			root.Handle("/api/system/", system.NewHandler(system.Options{Store: concreteStore, Provider: provider, Registry: proxyServer.CacheRegistry()}))
-			root.Handle("/", proxyServer.Routes())
-			handler = root
+		managementStore, ok := store.(system.Store)
+		if !ok {
+			return cleanup(cancel, store, listener, server, served, false, failure{FailureStore, errors.New("management store unavailable")}, deps.shutdownFor)
 		}
+		handler = rootHandler(cfg, provider, managementStore)
 	}
 	listener, runErr = deps.listen("tcp", cfg.Addr)
 	if runErr != nil {
@@ -187,6 +185,14 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 	case <-ctx.Done():
 	}
 	return cleanup(cancel, store, listener, server, served, serveDone, runErr, deps.shutdownFor)
+}
+
+func rootHandler(cfg config.Config, provider runtime.Provider, store system.Store) http.Handler {
+	proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
+	root := http.NewServeMux()
+	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: proxyServer.CacheRegistry()}))
+	root.Handle("/", proxyServer.Routes())
+	return root
 }
 
 func cleanup(cancel context.CancelFunc, store runtimeStore, listener net.Listener, server runtimeServer, served <-chan error, serveDone bool, runErr error, timeout time.Duration) error {

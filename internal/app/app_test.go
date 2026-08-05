@@ -268,6 +268,9 @@ func (s *fakeStore) LoadFormatterSnapshot(ctx context.Context) (sqlite.Snapshot,
 }
 
 func (*fakeStore) Repositories() sqlite.Repositories { return sqlite.Repositories{} }
+func (*fakeStore) UpdateSystemConfigs(context.Context, []sqlite.SystemConfig) (sqlite.Snapshot, error) {
+	return sqlite.Snapshot{}, errors.New("not implemented")
+}
 
 func awaitResult(t *testing.T, result <-chan error) error {
 	t.Helper()
