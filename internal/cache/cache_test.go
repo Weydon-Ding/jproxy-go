@@ -80,3 +80,22 @@ func TestTTLCacheExpiresEntriesByTTL(t *testing.T) {
 		t.Fatalf("expired key = %q, %t; want empty, false", got, ok)
 	}
 }
+
+func TestTTLCacheDelete_removesOnlyNamedEntry_andMissingKeyIsNoOp(t *testing.T) {
+	// Given
+	c := NewTTLCache[string](time.Minute, 3)
+	c.Set("first", "one")
+	c.Set("second", "two")
+
+	// When
+	c.Delete("first")
+	c.Delete("missing")
+
+	// Then
+	if _, ok := c.Get("first"); ok {
+		t.Fatal("deleted key remains")
+	}
+	if got, ok := c.Get("second"); !ok || got != "two" {
+		t.Fatalf("second key = %q, %t; want two, true", got, ok)
+	}
+}

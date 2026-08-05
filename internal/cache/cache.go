@@ -63,6 +63,13 @@ func (c *TTLCache[T]) Clear() {
 	c.mu.Unlock()
 }
 
+// Delete removes one named entry. Deleting a missing entry is intentionally a no-op.
+func (c *TTLCache[T]) Delete(key string) {
+	c.mu.Lock()
+	c.deleteLocked(key)
+	c.mu.Unlock()
+}
+
 func (c *TTLCache[T]) removeExpiredLocked(now time.Time) {
 	kept := c.order[:0]
 	for _, key := range c.order {
