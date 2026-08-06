@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jproxy-go 管理控制台</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>">
+</head>
+<body>
+  <div id="app">
+    <div id="login-view" class="view hidden">
+      <div class="login-panel">
+        <h1>jproxy-go 管理控制台</h1>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username">用户名</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="password">密码</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+          </div>
+          <div id="login-status" class="status hidden" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary">登录</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="console-view" class="view hidden">
+      <header class="header">
+        <h1>jproxy-go</h1>
+        <div class="header-actions">
+          <span id="user-info"></span>
+          <button id="logout-btn" class="btn btn-danger">退出</button>
+        </div>
+      </header>
+
+      <nav class="nav" role="tablist" aria-label="主导航">
+        <button class="nav-tab active" data-tab="system" role="tab" aria-selected="true" aria-controls="system-tab" id="tab-system">系统配置</button>
+        <button class="nav-tab" data-tab="account" role="tab" aria-selected="false" aria-controls="account-tab" id="tab-account">账户</button>
+        <button class="nav-tab" data-tab="sonarr-rule" role="tab" aria-selected="false" aria-controls="sonarr-rule-tab" id="tab-sonarr-rule">Sonarr 规则</button>
+        <button class="nav-tab" data-tab="radarr-rule" role="tab" aria-selected="false" aria-controls="radarr-rule-tab" id="tab-radarr-rule">Radarr 规则</button>
+        <button class="nav-tab" data-tab="examples" role="tab" aria-selected="false" aria-controls="examples-tab" id="tab-examples">示例</button>
+        <button class="nav-tab" data-tab="titles" role="tab" aria-selected="false" aria-controls="titles-tab" id="tab-titles">标题管理</button>
+      </nav>
+
+      <main class="main">
+        <div id="status-message" class="status hidden" aria-live="polite"></div>
+
+        <section id="system-tab" class="tab-content active" role="tabpanel" aria-labelledby="tab-system">
+          <h2>系统配置</h2>
+          <div class="panel">
+            <form id="config-form">
+              <div id="config-fields"></div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">保存配置</button>
+                <button type="button" id="clear-cache-btn" class="btn">清除缓存</button>
+                <button type="button" id="clear-all-cache-btn" class="btn btn-danger">清除所有缓存</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section id="account-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-account" aria-hidden="true">
+          <h2>账户管理</h2>
+          <div class="panel" id="account-section">
+            <form id="account-form">
+              <div class="form-group">
+                <label for="account-username">用户名</label>
+                <input type="text" id="account-username" name="username" required>
+              </div>
+              <div class="form-group">
+                <label for="account-password">新密码 (留空不变)</label>
+                <input type="password" id="account-password" name="password" autocomplete="new-password">
+              </div>
+              <div id="account-status" class="status hidden" aria-live="polite"></div>
+              <button type="submit" class="btn btn-primary">更新账户</button>
+            </form>
+          </div>
+        </section>
+
+        <section id="sonarr-rule-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-sonarr-rule" aria-hidden="true">
+          <h2>Sonarr 规则管理</h2>
+          <div class="panel">
+            <div class="toolbar">
+              <button type="button" id="sonarr-sync-btn" class="btn btn-primary">同步规则</button>
+            </div>
+            <form id="sonarr-rule-form" class="rule-form">
+              <h3>添加/编辑规则</h3>
+              <input type="hidden" id="sonarr-rule-id">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="sonarr-rule-token">Token *</label>
+                  <input type="text" id="sonarr-rule-token" required>
+                </div>
+                <div class="form-group">
+                  <label for="sonarr-rule-priority">Priority</label>
+                  <input type="number" id="sonarr-rule-priority" value="0">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="sonarr-rule-regex">Regex *</label>
+                <input type="text" id="sonarr-rule-regex" required>
+              </div>
+              <div class="form-group">
+                <label for="sonarr-rule-replacement">Replacement</label>
+                <input type="text" id="sonarr-rule-replacement">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="sonarr-rule-offset">Offset</label>
+                  <input type="number" id="sonarr-rule-offset" value="0">
+                </div>
+                <div class="form-group">
+                  <label for="sonarr-rule-valid-status">状态</label>
+                  <select id="sonarr-rule-valid-status">
+                    <option value="1">启用</option>
+                    <option value="0">禁用</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="sonarr-rule-example">Example *</label>
+                <textarea id="sonarr-rule-example" rows="2" required></textarea>
+              </div>
+              <div class="form-group">
+                <label for="sonarr-rule-remark">备注</label>
+                <input type="text" id="sonarr-rule-remark">
+              </div>
+              <button type="submit" class="btn btn-primary">保存规则</button>
+            </form>
+            <div class="table-container">
+              <table class="table" id="sonarr-rules-table" aria-label="Sonarr 规则列表">
+                <thead>
+                  <tr>
+                    <th scope="col">Token</th>
+                    <th scope="col">备注</th>
+                    <th scope="col">状态</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button type="button" id="sonarr-prev-btn" class="btn">上一页</button>
+              <span id="sonarr-page-info"></span>
+              <button type="button" id="sonarr-next-btn" class="btn">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="radarr-rule-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-radarr-rule" aria-hidden="true">
+          <h2>Radarr 规则管理</h2>
+          <div class="panel">
+            <div class="toolbar">
+              <button type="button" id="radarr-sync-btn" class="btn btn-primary">同步规则</button>
+            </div>
+            <form id="radarr-rule-form" class="rule-form">
+              <h3>添加/编辑规则</h3>
+              <input type="hidden" id="radarr-rule-id">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="radarr-rule-token">Token *</label>
+                  <input type="text" id="radarr-rule-token" required>
+                </div>
+                <div class="form-group">
+                  <label for="radarr-rule-priority">Priority</label>
+                  <input type="number" id="radarr-rule-priority" value="0">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="radarr-rule-regex">Regex *</label>
+                <input type="text" id="radarr-rule-regex" required>
+              </div>
+              <div class="form-group">
+                <label for="radarr-rule-replacement">Replacement</label>
+                <input type="text" id="radarr-rule-replacement">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="radarr-rule-offset">Offset</label>
+                  <input type="number" id="radarr-rule-offset" value="0">
+                </div>
+                <div class="form-group">
+                  <label for="radarr-rule-valid-status">状态</label>
+                  <select id="radarr-rule-valid-status">
+                    <option value="1">启用</option>
+                    <option value="0">禁用</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="radarr-rule-example">Example *</label>
+                <textarea id="radarr-rule-example" rows="2" required></textarea>
+              </div>
+              <div class="form-group">
+                <label for="radarr-rule-remark">备注</label>
+                <input type="text" id="radarr-rule-remark">
+              </div>
+              <button type="submit" class="btn btn-primary">保存规则</button>
+            </form>
+            <div class="table-container">
+              <table class="table" id="radarr-rules-table" aria-label="Radarr 规则列表">
+                <thead>
+                  <tr>
+                    <th scope="col">Token</th>
+                    <th scope="col">备注</th>
+                    <th scope="col">状态</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button type="button" id="radarr-prev-btn" class="btn">上一页</button>
+              <span id="radarr-page-info"></span>
+              <button type="button" id="radarr-next-btn" class="btn">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="examples-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-examples" aria-hidden="true">
+          <h2>示例管理</h2>
+          <div class="panel">
+            <h3>Sonarr 示例</h3>
+            <form id="sonarr-example-form" class="inline-form">
+              <label for="sonarr-example-text">示例文本</label>
+              <textarea id="sonarr-example-text" placeholder="输入示例文本，每行一条" rows="3"></textarea>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </form>
+            <div id="sonarr-examples"></div>
+
+            <h3>Radarr 示例</h3>
+            <form id="radarr-example-form" class="inline-form">
+              <label for="radarr-example-text">示例文本</label>
+              <textarea id="radarr-example-text" placeholder="输入示例文本，每行一条" rows="3"></textarea>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </form>
+            <div id="radarr-examples"></div>
+          </div>
+        </section>
+
+        <section id="titles-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-titles" aria-hidden="true">
+          <h2>标题管理</h2>
+          <div class="panel">
+            <h3>Sonarr 标题</h3>
+            <div class="toolbar">
+              <button type="button" id="sonarr-title-sync-btn" class="btn btn-primary">同步标题</button>
+              <button type="button" id="sonarr-batch-delete" class="btn btn-danger" disabled>批量删除</button>
+            </div>
+            <div class="table-container">
+              <table class="table" id="sonarr-titles-table" aria-label="Sonarr 标题列表">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="sonarr-title-select-all" aria-label="全选"></th>
+                    <th scope="col">主标题</th>
+                    <th scope="col">标题</th>
+                    <th scope="col">季号</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button type="button" id="sonarr-prev-btn" class="btn">上一页</button>
+              <span id="sonarr-page-info"></span>
+              <button type="button" id="sonarr-next-btn" class="btn">下一页</button>
+            </div>
+
+            <h3>Radarr 标题</h3>
+            <div class="toolbar">
+              <button type="button" id="radarr-title-sync-btn" class="btn btn-primary">同步标题</button>
+              <button type="button" id="radarr-batch-delete" class="btn btn-danger" disabled>批量删除</button>
+            </div>
+            <div class="table-container">
+              <table class="table" id="radarr-titles-table" aria-label="Radarr 标题列表">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="radarr-title-select-all" aria-label="全选"></th>
+                    <th scope="col">主标题</th>
+                    <th scope="col">标题</th>
+                    <th scope="col">年份</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button type="button" id="radarr-prev-btn" class="btn">上一页</button>
+              <span id="radarr-page-info"></span>
+              <button type="button" id="radarr-next-btn" class="btn">下一页</button>
+            </div>
+
+            <h3>TMDB 标题</h3>
+            <div class="toolbar">
+              <button type="button" id="tmdb-title-sync-btn" class="btn btn-primary">同步 TMDB</button>
+              <button type="button" id="tmdb-batch-delete" class="btn btn-danger" disabled>批量删除</button>
+            </div>
+            <div class="table-container">
+              <table class="table" id="tmdb-titles-table" aria-label="TMDB 标题列表">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="tmdb-title-select-all" aria-label="全选"></th>
+                    <th scope="col">标题</th>
+                    <th scope="col">TVDB ID</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button type="button" id="tmdb-prev-btn" class="btn">上一页</button>
+              <span id="tmdb-page-info"></span>
+              <button type="button" id="tmdb-next-btn" class="btn">下一页</button>
+            </div>
+            <form id="tmdb-save-form" class="inline-form">
+              <div class="form-group">
+                <label for="tmdb-tvdbid">TVDB ID *</label>
+                <input type="number" id="tmdb-tvdbid" required>
+              </div>
+              <div class="form-group">
+                <label for="tmdb-tmdbid">TMDB ID</label>
+                <input type="number" id="tmdb-tmdbid">
+              </div>
+              <div class="form-group">
+                <label for="tmdb-language">语言</label>
+                <input type="text" id="tmdb-language" value="zh-CN">
+              </div>
+              <div class="form-group">
+                <label for="tmdb-title-input">标题 *</label>
+                <input type="text" id="tmdb-title-input" required>
+              </div>
+              <div class="form-group">
+                <label for="tmdb-valid-status">状态</label>
+                <select id="tmdb-valid-status">
+                  <option value="1">有效</option>
+                  <option value="0">无效</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary">保存 TMDB</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/core.js"></script>
+  <script src="/assets/auth-config.js"></script>
+  <script src="/assets/rules.js"></script>
+  <script src="/assets/examples.js"></script>
+  <script src="/assets/titles.js"></script>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
