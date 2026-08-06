@@ -44,6 +44,10 @@ func (s *Server) Routes() http.Handler {
 			s.handleQBittorrent(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.EscapedPath(), "/sonarr/transmission/") || strings.HasPrefix(r.URL.EscapedPath(), "/radarr/transmission/") {
+			s.handleTransmission(w, r)
+			return
+		}
 		mux.ServeHTTP(w, r)
 	})
 }
