@@ -95,7 +95,7 @@ func TestTask9_rootMuxMeasuresLiveTitleSyncContracts(t *testing.T) {
 	mu.Unlock()
 	concurrentRejected := concurrentStatus == http.StatusBadRequest && concurrentCalls == 1
 	dynamicConfig := len(keys) == 2 && keys[0] == "first-key" && keys[1] == "second-key"
-	if firstStatus != http.StatusOK || !concurrentRejected || radarrStatus != http.StatusOK || gotRadarrCalls != 1 || tooFrequentStatus != http.StatusBadRequest || secondStatus != http.StatusOK || !dynamicConfig || tmdbStatus != http.StatusServiceUnavailable || disabled.Code != http.StatusNotFound || len(sonarrRows) != 3 || len(radarrRows) != 5 {
+	if firstStatus != http.StatusOK || !concurrentRejected || radarrStatus != http.StatusOK || gotRadarrCalls != 1 || tooFrequentStatus != http.StatusBadRequest || secondStatus != http.StatusOK || !dynamicConfig || tmdbStatus != http.StatusInternalServerError || disabled.Code != http.StatusNotFound || len(sonarrRows) != 3 || len(radarrRows) != 5 {
 		t.Fatalf("statuses=%d/%d/%d/%d/%d/%d calls=%d/%d keys=%d rows=%d/%d", firstStatus, concurrentStatus, radarrStatus, tooFrequentStatus, secondStatus, tmdbStatus, gotSonarrCalls, gotRadarrCalls, len(keys), len(sonarrRows), len(radarrRows))
 	}
 	routeCount := 0

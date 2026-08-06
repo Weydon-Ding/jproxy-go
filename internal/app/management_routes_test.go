@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"jproxy-go/internal/api/rule"
+	"jproxy-go/internal/api/title"
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
@@ -29,7 +32,10 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 		t.Fatal(err)
 	}
 	cfg := rootRouteConfig(true)
-	databaseHandler := rootHandler(cfg, runtime.NewProvider(snapshot, store), store)
+	databaseHandler := rootHandlerWithSyncDependencies(cfg, runtime.NewProvider(snapshot, store), store, managementSyncDependencies{
+		title: titleSyncDependencies{sonarr: failingTitleSyncer{}, radarr: failingTitleSyncer{}, tmdb: failingTitleSyncer{}, admission: permissiveTitleAdmission{}},
+		rule:  ruleSyncDependencies{sonarr: failingRuleSyncer{}, radarr: failingRuleSyncer{}},
+	})
 	environmentHandler := rootHandler(rootRouteConfig(false), runtime.NewStaticProvider(sqlite.Snapshot{}), nil)
 
 	// When / Then
@@ -39,6 +45,9 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 			response := httptest.NewRecorder()
 			databaseHandler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, bytes.NewReader(route.body)))
 			expectedStatus := route.status
+			if strings.HasSuffix(route.path, "/rule/sync") || route.path == "/api/tmdb/title/sync" {
+				expectedStatus = http.StatusInternalServerError
+			}
 			if strings.HasSuffix(route.path, "/title/sync") && !strings.Contains(route.path, "/tmdb/") {
 				expectedStatus = http.StatusInternalServerError
 			}
@@ -78,6 +87,26 @@ func TestRootHandler_exposesTodo7AndTodo8RoutesOnlyInDatabaseMode(t *testing.T) 
 	}
 	t.Logf("root_management_route_count=%d todo7_route_count=%d todo8_route_count=%d", len(routes), todo7Routes, todo8Routes)
 }
+
+type failingRuleSyncer struct{}
+
+func (failingRuleSyncer) Sync(context.Context) (rule.SyncResult, error) {
+	return rule.SyncSucceeded, errors.New("route sync failure")
+}
+
+type failingTitleSyncer struct{}
+
+func (failingTitleSyncer) Sync(context.Context) (title.SyncResult, error) {
+	return title.SyncSucceeded, errors.New("route sync failure")
+}
+
+type permissiveTitleAdmission struct{}
+
+func (permissiveTitleAdmission) BeginTitleSync(string) (runtime.TitleSyncAttempt, error) {
+	return runtime.TitleSyncAttempt{}, nil
+}
+
+func (permissiveTitleAdmission) FinishTitleSync(runtime.TitleSyncAttempt, bool) {}
 
 func TestRootHandler_returnsLiveSonarrSync_whenDatabaseModeIsEnabled(t *testing.T) {
 	// Given

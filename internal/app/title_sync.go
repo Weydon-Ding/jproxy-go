@@ -8,6 +8,7 @@ import (
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/runtime"
 	titlesync "jproxy-go/internal/sync/title"
+	tmdbsync "jproxy-go/internal/sync/tmdb"
 )
 
 type titleService interface{ Sync(context.Context) error }
@@ -30,5 +31,9 @@ func liveTitleSyncDependencies(cfg config.Config, store managementStore, registr
 	radarr := titlesync.NewRadarrService(titlesync.RadarrServiceDependencies{
 		Config: configSource, Client: titlesync.NewRadarrClient(titlesync.NewRequestClient(client, cfg.HTTPTimeout)), Repository: store.Repositories().RadarrTitles,
 	})
-	return titleSyncDependencies{sonarr: titleServiceAdapter{service: sonarr}, radarr: titleServiceAdapter{service: radarr}, admission: registry}
+	tmdb := tmdbsync.NewService(tmdbsync.Dependencies{
+		Config: tmdbsync.NewConfigSource(store.Repositories().SystemConfigs), Client: tmdbsync.NewClient(client, cfg.HTTPTimeout),
+		Source: store.Repositories().SonarrTitles, Repository: store.Repositories().TMDBTitles,
+	})
+	return titleSyncDependencies{sonarr: titleServiceAdapter{service: sonarr}, radarr: titleServiceAdapter{service: radarr}, tmdb: titleServiceAdapter{service: tmdb}, admission: registry}
 }

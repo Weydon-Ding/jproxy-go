@@ -11,7 +11,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"jproxy-go/internal/api/system"
 	"jproxy-go/internal/config"
 	"jproxy-go/internal/proxy"
 	"jproxy-go/internal/runtime"
@@ -173,7 +172,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 
 	handler := deps.newHandler(cfg, provider)
 	if cfg.Database.Enabled {
-		managementStore, ok := store.(system.Store)
+		managementStore, ok := store.(managementStore)
 		if !ok {
 			return cleanup(cancel, store, listener, server, served, false, failure{FailureStore, errors.New("management store unavailable")}, deps.shutdownFor)
 		}
@@ -201,13 +200,28 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 }
 
 func rootHandler(cfg config.Config, provider runtime.Provider, store managementStore) http.Handler {
+	return rootHandlerWithSyncDependencies(cfg, provider, store, managementSyncDependencies{})
+}
+
+type managementSyncDependencies struct {
+	title titleSyncDependencies
+	rule  ruleSyncDependencies
+}
+
+func rootHandlerWithSyncDependencies(cfg config.Config, provider runtime.Provider, store managementStore, dependencies managementSyncDependencies) http.Handler {
 	proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
 	if !cfg.Database.Enabled {
 		return proxyServer.Routes()
 	}
 	root := http.NewServeMux()
 	registry := proxyServer.CacheRegistry()
-	root.Handle("/api/", managementRoutes(store, provider, registry, liveTitleSyncDependencies(cfg, store, registry)))
+	if dependencies.title.admission == nil {
+		dependencies.title = liveTitleSyncDependencies(cfg, store, registry)
+	}
+	if dependencies.rule.sonarr == nil && dependencies.rule.radarr == nil {
+		dependencies.rule = liveRuleSyncDependencies(cfg, store, func(ctx context.Context, name string) error { return registry.Invalidate(ctx, name) })
+	}
+	root.Handle("/api/", managementRoutesWithRuleDependencies(store, provider, registry, nil, dependencies.title, dependencies.rule))
 	root.Handle("/", proxyServer.Routes())
 	return root
 }

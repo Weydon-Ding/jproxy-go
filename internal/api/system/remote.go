@@ -17,6 +17,8 @@ const (
 	defaultAuthorBackupURL = "https://github.rn.lckp.top/LuckyPuppy514/jproxy/main/src/main/resources/rule/author.json"
 )
 
+func DefaultRuleSyncSources() (string, string) { return defaultAuthorURL, defaultAuthorBackupURL }
+
 func (h *Handler) authorList(ctx context.Context) []string {
 	primary, backup := h.options.AuthorURL, h.options.AuthorBackupURL
 	if primary == "" {
