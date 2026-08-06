@@ -143,6 +143,9 @@ See `configs/jproxy.env.example`.
 | `HTTP_TIMEOUT_SECONDS` | `60` | Upstream HTTP timeout in seconds. |
 | `JPROXY_DB_ENABLED` | `false` | Open a writable long-lived SQLite store and load formatter payloads at startup. |
 | `JPROXY_DB_PATH` | none | Required when DB mode is enabled; ignored while DB mode is disabled. |
+| `JPROXY_LOGIN_ENABLED` | `false` | Require Bearer JWT authentication for DB-mode management API routes. |
+| `JPROXY_JWT_SECRET` | none | Required when login is enabled; use a non-default secret of at least 32 bytes. |
+| `JPROXY_TOKEN_EXPIRES_MINUTES` | `60` | JWT lifetime in minutes. |
 | `JPROXY_RADARR_FORMAT_ENABLED` | `false` | Enable the Phase 1 Radarr-only XML title formatter. |
 | `JPROXY_RADARR_FORMAT` | none | Required template when formatting is enabled; it must contain `{title}`. |
 | `JPROXY_RADARR_TITLE_CLEAN_REGEX` | empty | Optional Java-compatible clean-title regex used for `{cleanTitle}` rules. |
@@ -175,6 +178,18 @@ mixes database and environment data. `JPROXY_RADARR_FORMAT_ENABLED` and
 database is still opened and validated when both switches are false. With
 database mode disabled, existing environment JSON behavior is unchanged. The
 snapshot is startup-only; runtime reload remains Todo 5.
+
+## DB Management Authentication
+
+When DB mode is enabled, user compatibility endpoints are available at
+`/api/system/user/login`, `/info`, `/update`, `/logout`, and
+`/isLoginEnabled`. With `JPROXY_LOGIN_ENABLED=true`, all management routes
+under `/api/` except login and login status require a strict `Bearer` HS256 JWT.
+`/health` and all `/sonarr/` and `/radarr/` proxy routes remain public.
+
+When login is disabled, login returns an in-process anonymous token and existing
+management API access remains compatible; user updates remain forbidden. Legacy
+Java uppercase-MD5 credentials are upgraded to bcrypt after a successful login.
 
 ## Radarr Title Formatting
 

@@ -221,7 +221,13 @@ func rootHandlerWithSyncDependencies(cfg config.Config, provider runtime.Provide
 	if dependencies.rule.sonarr == nil && dependencies.rule.radarr == nil {
 		dependencies.rule = liveRuleSyncDependencies(cfg, store, func(ctx context.Context, name string) error { return registry.Invalidate(ctx, name) })
 	}
-	root.Handle("/api/", managementRoutesWithRuleDependencies(store, provider, registry, nil, dependencies.title, dependencies.rule))
+	management, err := securedManagementRoutes(cfg, store, provider, registry, dependencies.title, dependencies.rule)
+	if err != nil {
+		return http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			http.Error(writer, "service unavailable", http.StatusServiceUnavailable)
+		})
+	}
+	root.Handle("/api/", management)
 	root.Handle("/", proxyServer.Routes())
 	return root
 }

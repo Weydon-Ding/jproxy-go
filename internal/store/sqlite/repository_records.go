@@ -9,11 +9,12 @@ type SystemConfig struct {
 	UpdateTime  *string        `json:"updateTime,omitempty"`
 }
 type SystemUser struct {
-	ID                     SystemUserID
-	Username               string
-	Password, Role         *string
-	ValidStatus            ValidStatus
-	CreateTime, UpdateTime *string
+	ID                     SystemUserID `json:"id"`
+	Username               string       `json:"username"`
+	Password               *string      `json:"password,omitempty"`
+	Role                   *string      `json:"role,omitempty"`
+	ValidStatus            ValidStatus  `json:"validStatus"`
+	CreateTime, UpdateTime *string      `json:"-"`
 }
 type SonarrRule struct {
 	ID                     RuleID

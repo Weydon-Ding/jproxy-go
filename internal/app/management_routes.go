@@ -3,11 +3,15 @@ package app
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"jproxy-go/internal/api/example"
 	"jproxy-go/internal/api/rule"
 	"jproxy-go/internal/api/system"
 	"jproxy-go/internal/api/title"
+	"jproxy-go/internal/api/user"
+	"jproxy-go/internal/auth"
+	"jproxy-go/internal/config"
 	"jproxy-go/internal/runtime"
 )
 
@@ -71,6 +75,37 @@ func managementRoutesWithRuleDependencies(store managementStore, provider runtim
 	root.Handle("/api/tmdb/title/", titleHandler)
 	root.Handle("/api/system/", system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry, Version: localBuildVersion()}))
 	return root
+}
+
+func securedManagementRoutes(cfg config.Config, store managementStore, provider runtime.Provider, registry *runtime.Registry, titleDependencies titleSyncDependencies, ruleDependencies ruleSyncDependencies) (http.Handler, error) {
+	secret := []byte(cfg.Auth.JWTSecret)
+	expiresIn := cfg.Auth.TokenExpiresMinutes
+	if expiresIn == 0 {
+		expiresIn = 60
+	}
+	if !cfg.Auth.LoginEnabled {
+		var err error
+		secret, err = auth.RandomSecret()
+		if err != nil {
+			return nil, err
+		}
+	}
+	manager, err := auth.NewManager(secret, time.Duration(expiresIn)*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	users := user.NewHandler(user.Options{Store: store, Tokens: manager, LoginEnabled: cfg.Auth.LoginEnabled})
+	management := managementRoutesWithRuleDependencies(store, provider, registry, nil, titleDependencies, ruleDependencies)
+	root := http.NewServeMux()
+	root.Handle("/api/system/user/login", users)
+	root.Handle("/api/system/user/isLoginEnabled", users)
+	root.Handle("/api/system/user/", auth.Require(manager, users))
+	if cfg.Auth.LoginEnabled {
+		root.Handle("/api/", auth.Require(manager, management))
+	} else {
+		root.Handle("/api/", management)
+	}
+	return root, nil
 }
 
 func managementTitleHandler(store managementStore, provider runtime.Provider, registry *runtime.Registry, syncDependencies titleSyncDependencies) http.Handler {

@@ -15,6 +15,9 @@ func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("CACHE_EXPIRES", "")
 	t.Setenv("OFFSET_CACHE_MAX_ENTRIES", "")
 	t.Setenv("HTTP_TIMEOUT_SECONDS", "")
+	t.Setenv("JPROXY_LOGIN_ENABLED", "")
+	t.Setenv("JPROXY_JWT_SECRET", "")
+	t.Setenv("JPROXY_TOKEN_EXPIRES_MINUTES", "")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -46,6 +49,40 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if cfg.HTTPTimeout != 60*time.Second {
 		t.Fatalf("HTTPTimeout = %s, want 60s", cfg.HTTPTimeout)
+	}
+}
+
+func TestLoadConfig_rejectsInvalidEnabledJWTSecrets(t *testing.T) {
+	tests := []string{"", "short", "change-me", "11111111111111111111111111111111", "your-32-byte-secret-key-here"}
+	for _, secret := range tests {
+		t.Run(secret, func(t *testing.T) {
+			// Given
+			t.Setenv("JPROXY_LOGIN_ENABLED", "true")
+			t.Setenv("JPROXY_JWT_SECRET", secret)
+
+			// When
+			_, err := LoadConfig()
+
+			// Then
+			if err == nil {
+				t.Fatal("LoadConfig() error = nil")
+			}
+		})
+	}
+}
+
+func TestLoadConfig_loadsEnabledAuth(t *testing.T) {
+	// Given
+	t.Setenv("JPROXY_LOGIN_ENABLED", "true")
+	t.Setenv("JPROXY_JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("JPROXY_TOKEN_EXPIRES_MINUTES", "15")
+
+	// When
+	cfg, err := LoadConfig()
+
+	// Then
+	if err != nil || !cfg.Auth.LoginEnabled || cfg.Auth.TokenExpiresMinutes != 15 {
+		t.Fatalf("LoadConfig() = %#v, %v", cfg, err)
 	}
 }
 
