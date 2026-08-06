@@ -98,7 +98,7 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Implemented in Go | DB-mode sync rereads persisted configuration every request and atomically removes stale rows. Atomic replacement intentionally differs from Java upsert-only sync. |
 | `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; sync returns 503 until Todo10 installs a real adapter. |
 | `SystemUserServiceImpl` | password check, JWT sign/verify/logout, user retrieval/update | Pending migration | Todo 11. |
-| `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Pending migration | Todo 13. |
+| `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Implemented in Go | Todo 13 provides a revision-aware standard-library client with bounded, redacted HTTP behavior. Periodic login and Sonarr/Radarr rename workflows remain pending in Todo 15. |
 | `TransmissionServiceImpl` | RPC login/session, torrent rename | Pending migration | Todo 14 must implement protocol-correct behavior rather than Java placeholders. |
 
 ## Transmission Java Stubs
@@ -115,6 +115,17 @@ The remaining Transmission methods have failure returns for real protocol or
 lookup outcomes; they are not classified as unconditional stubs. Todo 14 will
 test the session-ID handshake, Basic authentication, request shape, failures,
 and redaction explicitly.
+
+## qBittorrent Compatibility Routes
+
+The legacy Java Charon constants reserve `/sonarr/qbittorrent` and
+`/radarr/qbittorrent`. Go completes these safely as public compatibility
+proxies for bounded `GET` and `POST` requests below `/api/v2/`. They use the
+current runtime qBittorrent URL, preserve end-to-end request and response data,
+and reject traversal, redirects, hop-by-hop headers, oversize messages, and
+unconfigured upstreams. The routes do not perform login or use the internal
+downloader session. Periodic downloader login and Sonarr/Radarr rename workflows
+remain Todo 15 work.
 
 ## Source Completeness Check
 

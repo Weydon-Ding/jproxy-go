@@ -39,7 +39,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/radarr/prowlarr/", s.handleIndexer("radarr", "prowlarr"))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.EscapedPath(), "/sonarr/qbittorrent/") || strings.HasPrefix(r.URL.EscapedPath(), "/radarr/qbittorrent/") {
+			s.handleQBittorrent(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {

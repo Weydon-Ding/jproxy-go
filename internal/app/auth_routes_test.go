@@ -74,6 +74,35 @@ func TestRootHandler_issuesAnonymousTokenAndKeepsManagementCompatible_whenLoginD
 	}
 }
 
+func TestRootHandler_keepsQBittorrentRoutesPublic_whenLoginEnabledAndDisabled(t *testing.T) {
+	// Given
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "qbit-auth.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("qbit")) }))
+	t.Cleanup(upstream.Close)
+	cfg := config.Config{HTTPTimeout: time.Second, Database: config.DatabaseConfig{Enabled: true}, Auth: config.AuthConfig{LoginEnabled: true, JWTSecret: "0123456789abcdef0123456789abcdef", TokenExpiresMinutes: 60}}
+	provider := runtime.NewStaticProvider(sqlite.Snapshot{QBittorrentURL: upstream.URL})
+	database := httptest.NewServer(rootHandler(cfg, provider, store))
+	t.Cleanup(database.Close)
+	disabled := rootHandler(config.Config{HTTPTimeout: time.Second}, runtime.NewStaticProvider(sqlite.Snapshot{}), nil)
+
+	// When / Then
+	for _, path := range []string{"/sonarr/qbittorrent/api/v2/torrents/info", "/radarr/qbittorrent/api/v2/torrents/info"} {
+		response := rootRequest(t, database.URL, http.MethodGet, path, "", "")
+		if response.Code != http.StatusOK || response.Body.String() != "qbit" {
+			t.Fatalf("path=%s status=%d body=%q", path, response.Code, response.Body.String())
+		}
+	}
+	recorder := httptest.NewRecorder()
+	disabled.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sonarr/qbittorrent/api/v2/torrents/info", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("disabled status=%d", recorder.Code)
+	}
+}
+
 func rootRequest(t *testing.T, base, method, path, body, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	request, err := http.NewRequest(method, base+path, bytes.NewBufferString(body))
