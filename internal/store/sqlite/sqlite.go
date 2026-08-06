@@ -19,15 +19,18 @@ const busyTimeoutMilliseconds = 5000
 
 // Snapshot is the immutable runtime configuration read once during startup.
 type Snapshot struct {
-	Radarr              format.Config
-	Sonarr              format.SonarrConfig
-	RadarrCandidates    []search.Candidate
-	SonarrCandidates    []search.Candidate
-	JackettURL          string
-	ProwlarrURL         string
-	QBittorrentURL      string
-	QBittorrentUsername string
-	QBittorrentPassword string
+	Radarr               format.Config
+	Sonarr               format.SonarrConfig
+	RadarrCandidates     []search.Candidate
+	SonarrCandidates     []search.Candidate
+	JackettURL           string
+	ProwlarrURL          string
+	QBittorrentURL       string
+	QBittorrentUsername  string
+	QBittorrentPassword  string
+	TransmissionURL      string
+	TransmissionUsername string
+	TransmissionPassword string
 }
 
 // Load reads all active formatter records from an existing SQLite database.
@@ -143,6 +146,18 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	transmissionURL, err := loadOptionalSystemConfig(ctx, tx, "transmissionUrl")
+	if err != nil {
+		return Snapshot{}, err
+	}
+	transmissionUsername, err := loadOptionalSystemConfig(ctx, tx, "transmissionUsername")
+	if err != nil {
+		return Snapshot{}, err
+	}
+	transmissionPassword, err := loadOptionalSystemConfig(ctx, tx, "transmissionPassword")
+	if err != nil {
+		return Snapshot{}, err
+	}
 	radarrRules, err := loadRules(ctx, tx, "radarr_rule")
 	if err != nil {
 		return Snapshot{}, err
@@ -168,15 +183,18 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snapshot := Snapshot{
-		Radarr:              format.Config{Format: radarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: radarrRules, Titles: radarrTitles},
-		Sonarr:              format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles},
-		RadarrCandidates:    search.RadarrCandidates(radarrCandidateRows),
-		SonarrCandidates:    search.SonarrCandidates(sonarrCandidateRows),
-		JackettURL:          jackettURL,
-		ProwlarrURL:         prowlarrURL,
-		QBittorrentURL:      qbittorrentURL,
-		QBittorrentUsername: qbittorrentUsername,
-		QBittorrentPassword: qbittorrentPassword,
+		Radarr:               format.Config{Format: radarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: radarrRules, Titles: radarrTitles},
+		Sonarr:               format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles},
+		RadarrCandidates:     search.RadarrCandidates(radarrCandidateRows),
+		SonarrCandidates:     search.SonarrCandidates(sonarrCandidateRows),
+		JackettURL:           jackettURL,
+		ProwlarrURL:          prowlarrURL,
+		QBittorrentURL:       qbittorrentURL,
+		QBittorrentUsername:  qbittorrentUsername,
+		QBittorrentPassword:  qbittorrentPassword,
+		TransmissionURL:      transmissionURL,
+		TransmissionUsername: transmissionUsername,
+		TransmissionPassword: transmissionPassword,
 	}
 	if err := format.ValidateConfig(snapshot.Radarr); err != nil {
 		return Snapshot{}, fmt.Errorf("validate Radarr SQLite formatter snapshot: %w", err)

@@ -173,6 +173,35 @@ func TestProvider_publishesQBittorrentConfigOnlyForSystemScope(t *testing.T) {
 	}
 }
 
+func TestProvider_publishesTransmissionConfigOnlyForSystemScope(t *testing.T) {
+	// Given
+	initial := testSnapshot("old")
+	initial.TransmissionURL = "http://old.example/transmission/rpc"
+	initial.TransmissionUsername = "old-user"
+	initial.TransmissionPassword = "old-password"
+	loaded := testSnapshot("new")
+	loaded.TransmissionURL = "http://new.example/transmission/rpc"
+	loaded.TransmissionUsername = "new-user"
+	loaded.TransmissionPassword = "new-password"
+	provider := NewProvider(initial, &testLoader{snapshot: loaded})
+	before := provider.Snapshot()
+
+	// When
+	if err := provider.Refresh(context.Background(), ScopeRadarrRules); err != nil {
+		t.Fatal(err)
+	}
+	afterUnrelated := provider.Snapshot()
+	if err := provider.Refresh(context.Background(), ScopeSystemConfig); err != nil {
+		t.Fatal(err)
+	}
+	afterSystem := provider.Snapshot()
+
+	// Then
+	if before.TransmissionRevision == 0 || afterUnrelated.TransmissionURL != initial.TransmissionURL || afterUnrelated.TransmissionRevision != before.TransmissionRevision || afterSystem.TransmissionURL != loaded.TransmissionURL || afterSystem.TransmissionUsername != loaded.TransmissionUsername || afterSystem.TransmissionPassword != loaded.TransmissionPassword || afterSystem.TransmissionRevision != before.TransmissionRevision+1 || afterSystem.QBittorrentRevision != before.QBittorrentRevision+1 {
+		t.Fatal("Transmission configuration or revision did not follow system-config publication semantics")
+	}
+}
+
 func TestPublishPrepared_replacesQBittorrentConfigAndRevision(t *testing.T) {
 	// Given
 	initial := testSnapshot("old")
@@ -189,6 +218,25 @@ func TestPublishPrepared_replacesQBittorrentConfigAndRevision(t *testing.T) {
 	// Then
 	if !published || after.QBittorrentURL != next.QBittorrentURL || after.QBittorrentUsername != next.QBittorrentUsername || after.QBittorrentPassword != next.QBittorrentPassword || after.QBittorrentRevision != before.QBittorrentRevision+1 {
 		t.Fatalf("published=%t before=%+v after=%+v", published, before, after)
+	}
+}
+
+func TestPublishPrepared_replacesTransmissionConfigAndRevision(t *testing.T) {
+	// Given
+	initial := testSnapshot("old")
+	initial.TransmissionURL, initial.TransmissionUsername, initial.TransmissionPassword = "http://old/transmission/rpc", "old-user", "old-password"
+	provider := NewStaticProvider(initial)
+	before := provider.Snapshot()
+	next := testSnapshot("new")
+	next.TransmissionURL, next.TransmissionUsername, next.TransmissionPassword = "http://new/transmission/rpc", "new-user", "new-password"
+
+	// When
+	published := PublishPrepared(provider, next)
+	after := provider.Snapshot()
+
+	// Then
+	if !published || after.TransmissionURL != next.TransmissionURL || after.TransmissionUsername != next.TransmissionUsername || after.TransmissionPassword != next.TransmissionPassword || after.TransmissionRevision != before.TransmissionRevision+1 || after.QBittorrentRevision != before.QBittorrentRevision+1 {
+		t.Fatal("prepared publication did not replace Transmission configuration and revisions")
 	}
 }
 

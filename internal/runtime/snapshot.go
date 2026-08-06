@@ -46,6 +46,10 @@ type Snapshot struct {
 	QBittorrentUsername  string
 	QBittorrentPassword  string
 	QBittorrentRevision  uint64
+	TransmissionURL      string
+	TransmissionUsername string
+	TransmissionPassword string
+	TransmissionRevision uint64
 	RadarrRevision       uint64
 	SonarrRevision       uint64
 	RadarrSearchRevision uint64
@@ -90,6 +94,10 @@ func (p *provider) Snapshot() Snapshot {
 		QBittorrentUsername:  value.QBittorrentUsername,
 		QBittorrentPassword:  value.QBittorrentPassword,
 		QBittorrentRevision:  value.QBittorrentRevision,
+		TransmissionURL:      value.TransmissionURL,
+		TransmissionUsername: value.TransmissionUsername,
+		TransmissionPassword: value.TransmissionPassword,
+		TransmissionRevision: value.TransmissionRevision,
 		RadarrRevision:       value.RadarrRevision,
 		SonarrRevision:       value.SonarrRevision,
 		RadarrSearchRevision: value.RadarrSearchRevision,
@@ -134,7 +142,7 @@ func (p *provider) publishPrepared(source sqlite.Snapshot) {
 }
 
 func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope) Snapshot {
-	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrCandidates: cloneCandidates(previous.RadarrCandidates), SonarrCandidates: cloneCandidates(previous.SonarrCandidates), JackettURL: previous.JackettURL, ProwlarrURL: previous.ProwlarrURL, QBittorrentURL: previous.QBittorrentURL, QBittorrentUsername: previous.QBittorrentUsername, QBittorrentPassword: previous.QBittorrentPassword, RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision, QBittorrentRevision: previous.QBittorrentRevision}
+	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrCandidates: cloneCandidates(previous.RadarrCandidates), SonarrCandidates: cloneCandidates(previous.SonarrCandidates), JackettURL: previous.JackettURL, ProwlarrURL: previous.ProwlarrURL, QBittorrentURL: previous.QBittorrentURL, QBittorrentUsername: previous.QBittorrentUsername, QBittorrentPassword: previous.QBittorrentPassword, QBittorrentRevision: previous.QBittorrentRevision, TransmissionURL: previous.TransmissionURL, TransmissionUsername: previous.TransmissionUsername, TransmissionPassword: previous.TransmissionPassword, TransmissionRevision: previous.TransmissionRevision, RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision}
 	if scopes == allScopes {
 		next.Radarr = cloneRadarr(source.Radarr)
 		next.Sonarr = cloneSonarr(source.Sonarr)
@@ -152,6 +160,10 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 		next.QBittorrentUsername = source.QBittorrentUsername
 		next.QBittorrentPassword = source.QBittorrentPassword
 		next.QBittorrentRevision++
+		next.TransmissionURL = source.TransmissionURL
+		next.TransmissionUsername = source.TransmissionUsername
+		next.TransmissionPassword = source.TransmissionPassword
+		next.TransmissionRevision++
 		next.RadarrRevision++
 		next.SonarrRevision++
 	}
