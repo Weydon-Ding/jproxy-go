@@ -81,7 +81,7 @@ func (s *Server) handleIndexer(kind, backend string) http.HandlerFunc {
 func (s *Server) executeExpandedSearch(r *http.Request, kind, backend string, q url.Values, searchKey string, revision uint64, snapshot runtime.Snapshot) (string, error) {
 	searchKey = strings.TrimSuffix(searchKey, " 00")
 	q.Set("q", searchKey)
-	titles := searchTitles(kind, searchKey)
+	titles := expandedSearchTitles(kind, searchKey, snapshot)
 	if len(titles) == 0 {
 		return s.executeRequest(r, backend, q, snapshot)
 	}
