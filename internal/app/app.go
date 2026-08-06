@@ -15,6 +15,7 @@ import (
 	"jproxy-go/internal/proxy"
 	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
+	"jproxy-go/internal/ui"
 )
 
 const shutdownTimeout = 5 * time.Second
@@ -227,8 +228,15 @@ func rootHandlerWithSyncDependencies(cfg config.Config, provider runtime.Provide
 			http.Error(writer, "service unavailable", http.StatusServiceUnavailable)
 		})
 	}
+	// Mount UI handler for admin console
+	uiHandler := ui.NewHandler()
+	root.Handle("/", uiHandler)
 	root.Handle("/api/", management)
-	root.Handle("/", proxyServer.Routes())
+	// Proxy routes must come after UI to avoid conflicts
+	proxyRoutes := proxyServer.Routes()
+	root.Handle("/sonarr/", proxyRoutes)
+	root.Handle("/radarr/", proxyRoutes)
+	root.Handle("/health", proxyRoutes)
 	return root
 }
 
