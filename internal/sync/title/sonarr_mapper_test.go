@@ -1,13 +1,30 @@
 package titlesync
 
 import (
+	"reflect"
 	"testing"
+
+	"jproxy-go/internal/store/sqlite"
 )
 
 func TestMapSonarr_preservesJavaRowOrderAndFields_whenSeriesValid(t *testing.T) {
-	rows, err := MapSonarr([]SonarrSeries{{ID: 7, TVDBID: 12, Title: "The Main", TitleSlug: "the-main", Monitored: true, AlternateTitles: []SonarrAlternateTitle{{Title: "Alt", SceneSeasonNumber: 2}}}}, `the`)
-	if err != nil || len(rows) != 3 || rows[0].ID != 120 || rows[1].Title != "The Main" || *rows[1].CleanTitle != "-main" || rows[2].SeasonNumber != 2 || rows[2].ID != 122 || rows[0].SeriesID == nil || *rows[0].SeriesID != 7 {
-		t.Fatalf("rows=%#v err=%v", rows, err)
+	// Given
+	seriesID := int64(7)
+	firstClean := "main"
+	secondClean := "-main"
+	thirdClean := "alt"
+	input := []SonarrSeries{{ID: 7, TVDBID: 12, Title: "The Main", TitleSlug: "the-main", Monitored: true, AlternateTitles: []SonarrAlternateTitle{{Title: "Alt", SceneSeasonNumber: 2}}}}
+	expected := []sqlite.SonarrTitle{{ID: 120, TVDBID: 12, SNO: 0, MainTitle: "The Main", Title: "The Main", CleanTitle: &firstClean, SeasonNumber: -1, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, SeriesID: &seriesID}, {ID: 121, TVDBID: 12, SNO: 1, MainTitle: "The Main", Title: "The Main", CleanTitle: &secondClean, SeasonNumber: -1, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, SeriesID: &seriesID}, {ID: 122, TVDBID: 12, SNO: 2, MainTitle: "The Main", Title: "Alt", CleanTitle: &thirdClean, SeasonNumber: 2, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, SeriesID: &seriesID}}
+
+	// When
+	rows, err := MapSonarr(input, `the`)
+
+	// Then
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if !reflect.DeepEqual(rows, expected) {
+		t.Fatalf("rows=%#v\nexpected=%#v", rows, expected)
 	}
 }
 func TestMapSonarr_rejectsCollisionAndOverflow_whenBatchCannotPersist(t *testing.T) {

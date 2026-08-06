@@ -1,11 +1,27 @@
 package titlesync
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"jproxy-go/internal/store/sqlite"
+)
 
 func TestMapRadarr_preservesPathAndCloneOrder_whenMovieValid(t *testing.T) {
-	rows, err := MapRadarr([]RadarrMovie{{ID: 7, TMDBID: 12, Title: "Main", Path: `C:\Movies\Path Title (2024)`, CleanTitle: "upstream", OriginalTitle: "Original", Year: 2024, AlternateTitles: []RadarrAlternateTitle{{Title: "Alt"}}}}, "")
-	if err != nil || len(rows) != 5 || rows[1].Title != "Path Title" || rows[2].Title != "Path Title" || rows[2].CleanTitle != "upstream" || rows[4].ID != 124 || rows[0].MovieID == nil || *rows[0].MovieID != 7 {
-		t.Fatalf("rows=%#v err=%v", rows, err)
+	// Given
+	movieID := int64(7)
+	input := []RadarrMovie{{ID: 7, TMDBID: 12, Title: "Main", Path: `C:\Movies\Path Title (2024)`, CleanTitle: "upstream", OriginalTitle: "Original", Year: 2024, Monitored: true, AlternateTitles: []RadarrAlternateTitle{{Title: "Alt"}}}}
+	expected := []sqlite.RadarrTitle{{ID: 120, TMDBID: 12, SNO: 0, MainTitle: "Main", Title: "Main", CleanTitle: "main", Year: 2024, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, MovieID: &movieID}, {ID: 121, TMDBID: 12, SNO: 1, MainTitle: "Main", Title: "Path Title", CleanTitle: "path title", Year: 2024, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, MovieID: &movieID}, {ID: 122, TMDBID: 12, SNO: 2, MainTitle: "Main", Title: "Path Title", CleanTitle: "upstream", Year: 2024, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, MovieID: &movieID}, {ID: 123, TMDBID: 12, SNO: 3, MainTitle: "Main", Title: "Original", CleanTitle: "original", Year: 2024, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, MovieID: &movieID}, {ID: 124, TMDBID: 12, SNO: 4, MainTitle: "Main", Title: "Alt", CleanTitle: "alt", Year: 2024, Monitored: sqlite.Monitored, ValidStatus: sqlite.Valid, MovieID: &movieID}}
+
+	// When
+	rows, err := MapRadarr(input, "")
+
+	// Then
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if !reflect.DeepEqual(rows, expected) {
+		t.Fatalf("rows=%#v\nexpected=%#v", rows, expected)
 	}
 }
 
