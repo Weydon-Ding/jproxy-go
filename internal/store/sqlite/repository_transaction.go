@@ -130,10 +130,13 @@ func (t datasetTransaction) UpsertTMDBTitles(ctx context.Context, b TMDBTitleBat
 	for start := 0; start < len(b.Rows); start += batchLimit {
 		end := min(start+batchLimit, len(b.Rows))
 		for _, v := range b.Rows[start:end] {
-			if err := validStatus(v.ValidStatus); err != nil {
+			if v.ID == 0 {
+				if _, err := t.SaveTMDBTitle(ctx, TMDBTitleSaveInput{Title: v}); err != nil {
+					return err
+				}
+			} else if err := validStatus(v.ValidStatus); err != nil {
 				return err
-			}
-			if err := upsertTMDBTitle(ctx, t.tx, v); err != nil {
+			} else if err := upsertTMDBTitle(ctx, t.tx, v); err != nil {
 				return err
 			}
 		}
