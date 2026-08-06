@@ -99,22 +99,60 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; sync returns 503 until Todo10 installs a real adapter. |
 | `SystemUserServiceImpl` | password check, JWT sign/verify/logout, user retrieval/update | Pending migration | Todo 11. |
 | `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Implemented in Go | Todo 13 provides a revision-aware standard-library client with bounded, redacted HTTP behavior. Periodic login and Sonarr/Radarr rename workflows remain pending in Todo 15. |
-| `TransmissionServiceImpl` | RPC login/session, torrent rename | Pending migration | Todo 14 must implement protocol-correct behavior rather than Java placeholders. |
+| `TransmissionServiceImpl` | RPC login/session, torrent rename | Implemented in Go | Todo 14 provides a revision-aware standard-library client with protocol-correct Transmission RPC behavior: runtime URL/user/password, Basic Auth every attempt, one bounded 409 `X-Transmission-Session-Id` replay, old Transmission 4.0.x bespoke `method/arguments/result` dialect, `session-get` non-empty version validation, `torrent-get` name/files, `torrent-rename-path` torrent root and same-directory file/path rename, typed malformed/unknown torrent/RPC errors, bounded/redacted I/O. Periodic login and Sonarr/Radarr rename workflows remain Todo 15. |
+
+## Transmission RPC Protocol Decision
+
+The Go Transmission client implements the legacy Transmission 4.0.x bespoke RPC
+dialect (`method`/`arguments`/`result`) rather than the newer JSON-RPC 2.0 format
+with snake_case fields adopted by Transmission main/4.1+. This is an intentional
+compatibility decision to support existing Java deployments and Transmission 4.0.x
+instances. Silent protocol negotiation is not performed; the client locks the old
+dialect explicitly. Future migration to JSON-RPC 2.0 is a separate concern and
+requires explicit version detection and migration planning.
+
+### Compatibility Routes
+
+The following public compatibility routes are provided for Transmission RPC
+access. They preserve end-to-end request and response data, require no internal
+auth or session injection, and do not perform automatic 409 retry logic at the
+proxy layer.
+
+| Route | Methods | Notes |
+| --- | --- | --- |
+| `/sonarr/transmission/transmission/rpc` | GET, POST | Public compatibility proxy; trailing slash variant supported; preserves caller headers/body/status; limits, path traversal, and redirect rules apply. |
+| `/radarr/transmission/transmission/rpc` | GET, POST | Public compatibility proxy; trailing slash variant supported; preserves caller headers/body/status; limits, path traversal, and redirect rules apply. |
+
+Client and proxy generated errors, and Todo 14 test evidence, redact credentials and session identifiers.
+
+### Transmission Behavior Contract
+
+| Behavior | Implementation |
+| --- | --- |
+| Runtime revision-aware URL/user/password | Implemented via config lookup per request. |
+| Basic Auth every RPC attempt | Credentials sent with each request. |
+| `X-Transmission-Session-Id` replay | One bounded 409 retry with session ID from `X-Transmission-Session-Id` response header. |
+| RPC dialect | Legacy `method`/`arguments`/`result`; not JSON-RPC 2.0. |
+| `session-get` validation | Non-empty version field validated on session establishment. |
+| `torrent-get` fields | `name`, `files` mapped to typed response. |
+| `torrent-rename-path` | Supports torrent root rename and same-directory file/path rename. |
+| Error handling | Typed malformed, unknown torrent, and RPC error responses. |
+| I/O bounds | Request/response sizes bounded; secrets redacted in error paths. |
 
 ## Transmission Java Stubs
 
 `TransmissionServiceImpl` contains source-level placeholders that are not valid
-compatibility behavior and must be replaced, not preserved:
+compatibility behavior and have been replaced by the Go protocol implementation:
 
 | Method | Java behavior | Status |
 | --- | --- | --- |
-| `files(String hash)` | returns `null` unconditionally | Java stub; Todo 14 must implement `torrent-get` file mapping. |
-| `renameFile(String hash, String oldPath, String newPath)` | returns `false` unconditionally | Java stub; Todo 14 must implement protocol-correct file/path rename. |
+| `files(String hash)` | returns `null` unconditionally | Java stub; replaced by Go `torrent-get` file mapping. Java `null` return is not a compatibility target. |
+| `renameFile(String hash, String oldPath, String newPath)` | returns `false` unconditionally | Java stub; replaced by Go `torrent-rename-path` implementation. Java `false` return is not a compatibility target. |
 
 The remaining Transmission methods have failure returns for real protocol or
-lookup outcomes; they are not classified as unconditional stubs. Todo 14 will
-test the session-ID handshake, Basic authentication, request shape, failures,
-and redaction explicitly.
+lookup outcomes. The Go client implements protocol-correct behavior with explicit
+testing of session-ID handshake, Basic authentication, request shape, failures,
+and redaction.
 
 ## qBittorrent Compatibility Routes
 
@@ -126,6 +164,30 @@ and reject traversal, redirects, hop-by-hop headers, oversize messages, and
 unconfigured upstreams. The routes do not perform login or use the internal
 downloader session. Periodic downloader login and Sonarr/Radarr rename workflows
 remain Todo 15 work.
+
+## Todo 14 vs Todo 15 Boundary
+
+Todo 14 covers the Transmission RPC protocol implementation only:
+
+- Standard-library HTTP client with revision-aware URL/user/password lookup
+- Basic Auth on every RPC attempt
+- One bounded 409 `X-Transmission-Session-Id` replay
+- Legacy `method`/`arguments`/`result` dialect
+- `session-get` version validation
+- `torrent-get` with `name` and `files` mapping
+- `torrent-rename-path` for torrent root and same-directory file/path rename
+- Typed error handling (malformed, unknown torrent, RPC errors)
+- Bounded and redacted I/O
+
+Todo 15 covers workflows and scheduler integration:
+
+- Periodic Transmission login/session refresh
+- Scheduler-driven sync workflows
+- Sonarr/Radarr event-driven rename workflows
+- Filename policy enforcement
+
+Java `files` returning `null` and `renameFile` returning `false` are explicitly
+not compatibility targets; they are replaced by the Go protocol implementation.
 
 ## Source Completeness Check
 
