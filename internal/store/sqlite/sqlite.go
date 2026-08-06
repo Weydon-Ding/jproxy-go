@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"jproxy-go/internal/format"
+	"jproxy-go/internal/search"
 
 	// Register the required pure-Go SQLite database/sql driver.
 	_ "modernc.org/sqlite"
@@ -16,12 +17,14 @@ import (
 
 const busyTimeoutMilliseconds = 5000
 
-// Snapshot is the immutable formatter configuration read once during startup.
+// Snapshot is the immutable runtime configuration read once during startup.
 type Snapshot struct {
-	Radarr      format.Config
-	Sonarr      format.SonarrConfig
-	JackettURL  string
-	ProwlarrURL string
+	Radarr           format.Config
+	Sonarr           format.SonarrConfig
+	RadarrCandidates []search.Candidate
+	SonarrCandidates []search.Candidate
+	JackettURL       string
+	ProwlarrURL      string
 }
 
 // Load reads all active formatter records from an existing SQLite database.
@@ -141,9 +144,21 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	radarrCandidateRows, err := loadRadarrCandidateRows(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	sonarrCandidateRows, err := loadSonarrCandidateRows(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	snapshot := Snapshot{
-		Radarr: format.Config{Format: radarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: radarrRules, Titles: radarrTitles},
-		Sonarr: format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles}, JackettURL: jackettURL, ProwlarrURL: prowlarrURL,
+		Radarr:           format.Config{Format: radarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: radarrRules, Titles: radarrTitles},
+		Sonarr:           format.SonarrConfig{Format: sonarrFormat, CleanTitleRegex: cleanTitleRegex, Rules: sonarrRules, Titles: sonarrTitles},
+		RadarrCandidates: search.RadarrCandidates(radarrCandidateRows),
+		SonarrCandidates: search.SonarrCandidates(sonarrCandidateRows),
+		JackettURL:       jackettURL,
+		ProwlarrURL:      prowlarrURL,
 	}
 	if err := format.ValidateConfig(snapshot.Radarr); err != nil {
 		return Snapshot{}, fmt.Errorf("validate Radarr SQLite formatter snapshot: %w", err)

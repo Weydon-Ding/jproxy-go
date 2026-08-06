@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"jproxy-go/internal/format"
+	"jproxy-go/internal/search"
 	"jproxy-go/internal/store/sqlite"
 )
 
@@ -37,6 +38,8 @@ const allScopes = ScopeSystemConfig | ScopeSonarrRules | ScopeSonarrTitles | Sco
 type Snapshot struct {
 	Radarr               format.Config
 	Sonarr               format.SonarrConfig
+	RadarrCandidates     []search.Candidate
+	SonarrCandidates     []search.Candidate
 	JackettURL           string
 	ProwlarrURL          string
 	RadarrRevision       uint64
@@ -75,6 +78,8 @@ func (p *provider) Snapshot() Snapshot {
 	return Snapshot{
 		Radarr:               cloneRadarr(value.Radarr),
 		Sonarr:               cloneSonarr(value.Sonarr),
+		RadarrCandidates:     cloneCandidates(value.RadarrCandidates),
+		SonarrCandidates:     cloneCandidates(value.SonarrCandidates),
 		JackettURL:           value.JackettURL,
 		ProwlarrURL:          value.ProwlarrURL,
 		RadarrRevision:       value.RadarrRevision,
@@ -121,10 +126,12 @@ func (p *provider) publishPrepared(source sqlite.Snapshot) {
 }
 
 func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope) Snapshot {
-	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision}
+	next := Snapshot{Radarr: cloneRadarr(previous.Radarr), Sonarr: cloneSonarr(previous.Sonarr), RadarrCandidates: cloneCandidates(previous.RadarrCandidates), SonarrCandidates: cloneCandidates(previous.SonarrCandidates), RadarrRevision: previous.RadarrRevision, SonarrRevision: previous.SonarrRevision, RadarrSearchRevision: previous.RadarrSearchRevision, SonarrSearchRevision: previous.SonarrSearchRevision}
 	if scopes == allScopes {
 		next.Radarr = cloneRadarr(source.Radarr)
 		next.Sonarr = cloneSonarr(source.Sonarr)
+		next.RadarrCandidates = cloneCandidates(source.RadarrCandidates)
+		next.SonarrCandidates = cloneCandidates(source.SonarrCandidates)
 	}
 	if scopes&ScopeSystemConfig != 0 {
 		next.Radarr.Format = source.Radarr.Format
@@ -144,6 +151,7 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 	}
 	if scopes&ScopeRadarrTitles != 0 {
 		next.Radarr.Titles = cloneRadarr(source.Radarr).Titles
+		next.RadarrCandidates = cloneCandidates(source.RadarrCandidates)
 	}
 	if scopes&(ScopeSonarrRules|ScopeSonarrTitles) != 0 {
 		next.SonarrRevision++
@@ -153,6 +161,7 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 	}
 	if scopes&ScopeSonarrTitles != 0 {
 		next.Sonarr.Titles = cloneSonarr(source.Sonarr).Titles
+		next.SonarrCandidates = cloneCandidates(source.SonarrCandidates)
 	}
 	if scopes&ScopeRadarrTitles != 0 {
 		next.RadarrSearchRevision++
@@ -161,6 +170,10 @@ func snapshotFromSQLite(source sqlite.Snapshot, previous Snapshot, scopes Scope)
 		next.SonarrSearchRevision++
 	}
 	return next
+}
+
+func cloneCandidates(value []search.Candidate) []search.Candidate {
+	return append([]search.Candidate(nil), value...)
 }
 
 func cloneRadarr(value format.Config) format.Config {

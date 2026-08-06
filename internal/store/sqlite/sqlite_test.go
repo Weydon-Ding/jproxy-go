@@ -184,6 +184,7 @@ var schemaStatements = []string{
 	`CREATE TABLE system_config (key TEXT, value TEXT, valid_status INTEGER)`,
 	`CREATE TABLE radarr_rule (token TEXT, priority INTEGER DEFAULT 1000, regex TEXT, replacement TEXT DEFAULT '', offset INTEGER DEFAULT 0, valid_status INTEGER DEFAULT 1)`,
 	`CREATE TABLE sonarr_rule (token TEXT, priority INTEGER DEFAULT 1000, regex TEXT, replacement TEXT DEFAULT '', offset INTEGER DEFAULT 0, valid_status INTEGER DEFAULT 1)`,
-	`CREATE TABLE radarr_title (main_title TEXT, title TEXT, clean_title TEXT, year INTEGER, valid_status INTEGER DEFAULT 1)`,
-	`CREATE TABLE sonarr_title (main_title TEXT, title TEXT, clean_title TEXT, season_number INTEGER DEFAULT 1, valid_status INTEGER DEFAULT 1)`,
+	`CREATE TABLE radarr_title (tmdb_id INTEGER DEFAULT 0, sno INTEGER DEFAULT 0, main_title TEXT, title TEXT, clean_title TEXT, year INTEGER, monitored INTEGER DEFAULT 1, valid_status INTEGER DEFAULT 1)`,
+	`CREATE TABLE sonarr_title (tvdb_id INTEGER DEFAULT 0, sno INTEGER DEFAULT 0, main_title TEXT, title TEXT, clean_title TEXT, season_number INTEGER DEFAULT 1, monitored INTEGER DEFAULT 1, valid_status INTEGER DEFAULT 1)`,
+	`CREATE TABLE tmdb_title (tvdb_id INTEGER, tmdb_id INTEGER, language TEXT, title TEXT, valid_status INTEGER DEFAULT 1)`,
 }
