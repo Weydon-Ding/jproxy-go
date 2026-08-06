@@ -144,6 +144,54 @@ func TestProviderSnapshot_returnsDeepCopy(t *testing.T) {
 	t.Logf("task5_runtime_qa deep_snapshot_copy=true pointer_copy=true")
 }
 
+func TestProvider_publishesQBittorrentConfigOnlyForSystemScope(t *testing.T) {
+	// Given
+	initial := testSnapshot("old")
+	initial.QBittorrentURL = "http://old.example"
+	initial.QBittorrentUsername = "old-user"
+	initial.QBittorrentPassword = "old-password"
+	loaded := testSnapshot("new")
+	loaded.QBittorrentURL = "http://new.example"
+	loaded.QBittorrentUsername = "new-user"
+	loaded.QBittorrentPassword = "new-password"
+	provider := NewProvider(initial, &testLoader{snapshot: loaded})
+	before := provider.Snapshot()
+
+	// When
+	if err := provider.Refresh(context.Background(), ScopeRadarrRules); err != nil {
+		t.Fatal(err)
+	}
+	afterUnrelated := provider.Snapshot()
+	if err := provider.Refresh(context.Background(), ScopeSystemConfig); err != nil {
+		t.Fatal(err)
+	}
+	afterSystem := provider.Snapshot()
+
+	// Then
+	if before.QBittorrentRevision == 0 || afterUnrelated.QBittorrentURL != initial.QBittorrentURL || afterUnrelated.QBittorrentRevision != before.QBittorrentRevision || afterSystem.QBittorrentURL != loaded.QBittorrentURL || afterSystem.QBittorrentUsername != loaded.QBittorrentUsername || afterSystem.QBittorrentPassword != loaded.QBittorrentPassword || afterSystem.QBittorrentRevision != before.QBittorrentRevision+1 {
+		t.Fatalf("before=%+v unrelated=%+v system=%+v", before, afterUnrelated, afterSystem)
+	}
+}
+
+func TestPublishPrepared_replacesQBittorrentConfigAndRevision(t *testing.T) {
+	// Given
+	initial := testSnapshot("old")
+	initial.QBittorrentURL, initial.QBittorrentUsername, initial.QBittorrentPassword = "http://old", "old-user", "old-password"
+	provider := NewStaticProvider(initial)
+	before := provider.Snapshot()
+	next := testSnapshot("new")
+	next.QBittorrentURL, next.QBittorrentUsername, next.QBittorrentPassword = "http://new", "new-user", "new-password"
+
+	// When
+	published := PublishPrepared(provider, next)
+	after := provider.Snapshot()
+
+	// Then
+	if !published || after.QBittorrentURL != next.QBittorrentURL || after.QBittorrentUsername != next.QBittorrentUsername || after.QBittorrentPassword != next.QBittorrentPassword || after.QBittorrentRevision != before.QBittorrentRevision+1 {
+		t.Fatalf("published=%t before=%+v after=%+v", published, before, after)
+	}
+}
+
 func TestRegistryInvalidate_advancesOnlyMatchingSearchRevision(t *testing.T) {
 	// Given
 	loader := &testLoader{snapshot: testSnapshot("new")}
