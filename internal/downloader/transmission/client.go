@@ -64,7 +64,7 @@ func (c *Client) currentConfig() (config, error) {
 		return config{}, ErrInvalidConfig
 	}
 	base, err := url.Parse(snapshot.TransmissionURL)
-	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || base.ForceQuery || base.RawQuery != "" || base.Fragment != "" {
 		return config{}, ErrInvalidConfig
 	}
 	return config{endpoint: base, username: snapshot.TransmissionUsername, password: snapshot.TransmissionPassword, revision: snapshot.TransmissionRevision}, nil

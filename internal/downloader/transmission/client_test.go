@@ -153,13 +153,31 @@ func TestClient_usesCurrentEndpointWithoutLeakingStaleSession_whenRevisionChange
 }
 
 func TestClient_rejectsInvalidConfigurationAndRedirects(t *testing.T) {
-	// Given / When / Then
-	client, err := New(Options{Provider: &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: "http://user:password@example.test", TransmissionUsername: "user", TransmissionPassword: "password"}}, Timeout: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := client.Files(context.Background(), "hash"); !errors.Is(err, ErrInvalidConfig) {
-		t.Fatalf("invalid config err=%v", err)
+	for _, test := range []struct {
+		name   string
+		config runtime.Snapshot
+		want   error
+	}{
+		{name: "userinfo", config: runtime.Snapshot{TransmissionURL: "http://user:password@example.test", TransmissionUsername: "user", TransmissionPassword: "password"}, want: ErrInvalidConfig},
+		{name: "force query", config: runtime.Snapshot{TransmissionURL: "http://host/transmission/rpc?", TransmissionUsername: "user", TransmissionPassword: "password"}, want: ErrInvalidConfig},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// Given / When / Then
+			options := Options{Provider: &mutableProvider{snapshot: test.config}, Timeout: time.Second}
+			if test.name == "force query" {
+				options.HTTPClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+					t.Fatal("upstream transport was called")
+					return nil, nil
+				})}
+			}
+			client, err := New(options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.Files(context.Background(), "hash"); !errors.Is(err, test.want) {
+				t.Fatalf("invalid config err=%v", err)
+			}
+		})
 	}
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/other", http.StatusFound) }))
 	defer redirect.Close()
