@@ -18,9 +18,13 @@ func TestQBittorrentRoute_proxiesBothPublicPrefixes_whenRequestIsSafe(t *testing
 		if r.URL.Path != "/api/v2/torrents/info" || r.URL.RawQuery != "filter=all&x=%2F" || r.Method != http.MethodPost || string(body) != "payload" || r.Header.Get("X-Custom") != "value" || r.Host == "client.example" {
 			t.Fatalf("path=%q query=%q method=%q body=%q header=%q host=%q", r.URL.Path, r.URL.RawQuery, r.Method, body, r.Header.Get("X-Custom"), r.Host)
 		}
+		if r.Header.Get("Proxy-Connection") != "" {
+			t.Fatal("proxy-connection request header was forwarded")
+		}
 		w.Header().Add("Set-Cookie", "one=1")
 		w.Header().Add("Set-Cookie", "two=2")
 		w.Header().Set("X-Upstream", "yes")
+		w.Header().Set("Proxy-Connection", "keep-alive")
 		w.WriteHeader(http.StatusConflict)
 		_, _ = w.Write([]byte("upstream"))
 	}))
@@ -34,9 +38,10 @@ func TestQBittorrentRoute_proxiesBothPublicPrefixes_whenRequestIsSafe(t *testing
 		request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString("payload"))
 		request.Host = "client.example"
 		request.Header.Set("X-Custom", "value")
+		request.Header.Set("Proxy-Connection", "keep-alive")
 		handler.ServeHTTP(recorder, request)
 		// Then
-		if recorder.Code != http.StatusConflict || recorder.Body.String() != "upstream" || recorder.Header().Get("X-Upstream") != "yes" || len(recorder.Result().Cookies()) != 2 {
+		if recorder.Code != http.StatusConflict || recorder.Body.String() != "upstream" || recorder.Header().Get("X-Upstream") != "yes" || len(recorder.Result().Cookies()) != 2 || recorder.Header().Get("Proxy-Connection") != "" {
 			t.Fatalf("path=%s status=%d body=%q headers=%v", path, recorder.Code, recorder.Body.String(), recorder.Header())
 		}
 	}

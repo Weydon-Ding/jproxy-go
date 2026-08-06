@@ -126,7 +126,7 @@ func copyEndToEndHeaders(destination, source http.Header) {
 
 func hopHeader(name string) bool {
 	switch name {
-	case "Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade":
+	case "Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Proxy-Connection", "Te", "Trailer", "Transfer-Encoding", "Upgrade":
 		return true
 	}
 	return false
