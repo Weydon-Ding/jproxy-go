@@ -141,7 +141,7 @@ func (c *Client) requestStarted(ctx context.Context, cfg config, body []byte, sa
 		return nil, ErrInvalidConfig
 	}
 	request.Header.Set("Content-Type", "application/json")
-	if cfg.username != "" {
+	if cfg.username != "" || cfg.password != "" {
 		request.SetBasicAuth(cfg.username, cfg.password)
 	}
 	if saved.id != "" {

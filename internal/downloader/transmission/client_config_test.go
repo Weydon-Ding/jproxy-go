@@ -13,13 +13,16 @@ import (
 	"jproxy-go/internal/runtime"
 )
 
-func TestClient_rejectsIncompleteCredentials_beforeTransport(t *testing.T) {
+func TestClient_sendsJavaCompatibleIncompleteCredentials(t *testing.T) {
 	for _, credentials := range [][2]string{{"user", ""}, {"", "password"}} {
 		t.Run(credentials[0]+credentials[1], func(t *testing.T) {
 			// Given
-			client, err := New(Options{Provider: &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: "http://example.test", TransmissionUsername: credentials[0], TransmissionPassword: credentials[1]}}, HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-				t.Fatal("transport was called")
-				return nil, nil
+			client, err := New(Options{Provider: &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: "http://example.test", TransmissionUsername: credentials[0], TransmissionPassword: credentials[1]}}, HTTPClient: &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+				username, password, ok := request.BasicAuth()
+				if !ok || username != credentials[0] || password != credentials[1] {
+					t.Fatal("transport received unexpected credentials")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"result":"success","arguments":{"torrents":[{"id":7,"name":"root","files":[]}]}}`)), Header: make(http.Header)}, nil
 			})}, Timeout: time.Second})
 			if err != nil {
 				t.Fatal(err)
@@ -29,7 +32,7 @@ func TestClient_rejectsIncompleteCredentials_beforeTransport(t *testing.T) {
 			_, err = client.Files(context.Background(), "hash")
 
 			// Then
-			if !errors.Is(err, ErrInvalidConfig) {
+			if err != nil {
 				t.Fatalf("err=%v", err)
 			}
 		})
