@@ -73,6 +73,30 @@ func TestOpen_backsUpJavaSchemaBeforeMigration(t *testing.T) {
 	}
 }
 
+func TestOpen_acceptsJavaSchemaWithLiquibaseDefaultTableNames(t *testing.T) {
+	// Given
+	path := javaFixture(t)
+	db := openTestDB(t, path)
+	for _, statement := range []string{
+		`CREATE TABLE DATABASECHANGELOG (ID TEXT NOT NULL)`,
+		`CREATE TABLE DATABASECHANGELOGLOCK (ID INTEGER NOT NULL PRIMARY KEY, LOCKED BOOLEAN NOT NULL)`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("create Liquibase metadata table: %v", err)
+		}
+	}
+	closeTestDB(t, db)
+
+	// When
+	store, err := Open(context.Background(), path)
+
+	// Then
+	if err != nil {
+		t.Fatalf("Open() error = %v, want Liquibase default tables accepted", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+}
+
 func TestOpen_appliesMigrationsOnlyOnce_whenReopened(t *testing.T) {
 	// Given
 	path := javaFixture(t)

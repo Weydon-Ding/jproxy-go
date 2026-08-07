@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"strings"
 )
 
 type inspectionKind uint8
@@ -143,7 +144,7 @@ func validateJavaSchema(ctx context.Context, db *sql.DB, tables map[string]bool)
 }
 
 func allowedJavaTable(table string) bool {
-	if table == migrationLedgerTable || table == "databasechangelog" || table == "databasechangeloglock" {
+	if table == migrationLedgerTable || strings.EqualFold(table, "databasechangelog") || strings.EqualFold(table, "databasechangeloglock") {
 		return true
 	}
 	for _, contract := range javaTables {
