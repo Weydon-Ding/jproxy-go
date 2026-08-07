@@ -48,6 +48,78 @@ func TestClient_replaysOldEnvelopeOnceAfterSessionChallenge(t *testing.T) {
 	}
 }
 
+func TestClient_replacesOlderRevisionSession_afterRevisionChanges(t *testing.T) {
+	// Given
+	type requestKey struct {
+		revision uint64
+		session  string
+	}
+	var requestsMu sync.Mutex
+	requests := make(map[requestKey]int)
+	var provider *mutableProvider
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := requestKey{
+			revision: provider.Snapshot().TransmissionRevision,
+			session:  r.Header.Get("X-Transmission-Session-Id"),
+		}
+		requestsMu.Lock()
+		requests[key]++
+		requestsMu.Unlock()
+		switch key {
+		case requestKey{revision: 1, session: ""}:
+			w.Header().Set("X-Transmission-Session-Id", "revision-1-session")
+			w.WriteHeader(http.StatusConflict)
+		case requestKey{revision: 1, session: "revision-1-session"}:
+			_, _ = io.WriteString(w, `{"result":"success","arguments":{"version":"4.0"}}`)
+		case requestKey{revision: 2, session: ""}:
+			w.Header().Set("X-Transmission-Session-Id", "revision-2-session")
+			w.WriteHeader(http.StatusConflict)
+		case requestKey{revision: 2, session: "revision-2-session"}:
+			_, _ = io.WriteString(w, `{"result":"success","arguments":{"version":"4.0"}}`)
+		default:
+			t.Fatalf("unexpected request revision=%d session=%q", key.revision, key.session)
+		}
+	}))
+	defer upstream.Close()
+	provider = &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: upstream.URL, TransmissionRevision: 1}}
+	client := testClient(t, provider)
+	if err := client.Login(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	provider.set(runtime.Snapshot{TransmissionURL: upstream.URL, TransmissionRevision: 2})
+
+	// When
+	if err := client.Login(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Login(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then
+	requestsMu.Lock()
+	defer requestsMu.Unlock()
+	if requests[requestKey{revision: 1, session: ""}] != 1 ||
+		requests[requestKey{revision: 1, session: "revision-1-session"}] != 1 ||
+		requests[requestKey{revision: 2, session: ""}] != 1 ||
+		requests[requestKey{revision: 2, session: "revision-2-session"}] != 2 {
+		t.Fatalf("requests=%v", requests)
+	}
+}
+
+func TestClient_keepsNewerRevisionSession_whenOlderChallengeArrivesLast(t *testing.T) {
+	// Given
+	client := &Client{session: session{id: "revision-2-session", revision: 2}}
+
+	// When
+	client.compareAndSwapSession(session{}, session{id: "revision-1-session", revision: 1})
+
+	// Then
+	if client.session != (session{id: "revision-2-session", revision: 2}) {
+		t.Fatalf("session=%+v", client.session)
+	}
+}
+
 func TestClient_classifiesProtocolAndTransportFailures_whenResponsesAreInvalid(t *testing.T) {
 	for _, test := range []struct {
 		name, body string

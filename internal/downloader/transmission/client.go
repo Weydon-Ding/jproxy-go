@@ -120,7 +120,7 @@ func (c *Client) sessionFor(revision uint64) session {
 
 func (c *Client) compareAndSwapSession(current, next session) {
 	c.sessionMu.Lock()
-	if c.session == current {
+	if c.session == current || c.session.revision < next.revision {
 		c.session = next
 	}
 	c.sessionMu.Unlock()
