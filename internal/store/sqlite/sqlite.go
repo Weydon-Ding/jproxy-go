@@ -10,6 +10,7 @@ import (
 
 	"jproxy-go/internal/format"
 	"jproxy-go/internal/search"
+	"jproxy-go/internal/transmissionconfig"
 
 	// Register the required pure-Go SQLite database/sql driver.
 	_ "modernc.org/sqlite"
@@ -157,6 +158,13 @@ func loadSnapshot(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	transmissionPassword, err := loadOptionalSystemConfig(ctx, tx, "transmissionPassword")
 	if err != nil {
 		return Snapshot{}, err
+	}
+	transmissionURL, err = transmissionconfig.NormalizeEndpoint(transmissionURL)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("normalize Transmission SQLite formatter snapshot: %w", err)
+	}
+	if err := transmissionconfig.ValidateCredentials(transmissionUsername, transmissionPassword); err != nil {
+		return Snapshot{}, fmt.Errorf("validate Transmission SQLite formatter snapshot: %w", err)
 	}
 	radarrRules, err := loadRules(ctx, tx, "radarr_rule")
 	if err != nil {
