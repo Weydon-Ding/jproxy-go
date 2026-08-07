@@ -126,7 +126,7 @@ func TestParseEndpoint_rejectsEmptyAndReturnsNormalizedURL(t *testing.T) {
 	}
 }
 
-func TestValidateCredentials_acceptsAnonymousAndCompleteCredentials(t *testing.T) {
+func TestValidateCredentials_acceptsJavaCompatibleCredentialShapes(t *testing.T) {
 	tests := []struct {
 		name     string
 		username string
@@ -134,6 +134,7 @@ func TestValidateCredentials_acceptsAnonymousAndCompleteCredentials(t *testing.T
 	}{
 		{name: "anonymous", username: "", password: ""},
 		{name: "complete credentials", username: "alice", password: "secret"},
+		{name: "password without username", username: "", password: "secret"},
 	}
 
 	for _, test := range tests {
@@ -152,14 +153,12 @@ func TestValidateCredentials_acceptsAnonymousAndCompleteCredentials(t *testing.T
 	}
 }
 
-func TestValidateCredentials_rejectsIncompleteOrControlCredentialsWithoutLeakingSecrets(t *testing.T) {
+func TestValidateCredentials_rejectsControlCredentialsWithoutLeakingSecrets(t *testing.T) {
 	tests := []struct {
 		name     string
 		username string
 		password string
 	}{
-		{name: "username only", username: "alice", password: ""},
-		{name: "password only", username: "", password: "secret"},
 		{name: "username control", username: "alice\nadmin", password: "secret"},
 		{name: "password control", username: "alice", password: "secret\x7f"},
 	}
@@ -214,7 +213,7 @@ func TestErrors_doNotExposeEndpointOrCredentialCanaries(t *testing.T) {
 
 	// When
 	_, endpointErr := NormalizeEndpoint(endpointCanary)
-	credentialErr := ValidateCredentials(usernameCanary, "")
+	credentialErr := ValidateCredentials(usernameCanary+"\n", passwordCanary)
 
 	// Then
 	assertRedacted(t, endpointErr, endpointCanary, "alice", "secret", "endpoint-canary")

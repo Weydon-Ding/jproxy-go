@@ -104,17 +104,16 @@ func TestValidateValue_rejectsUnsafeTransmissionEndpointsWithoutLeakingInput(t *
 	}
 }
 
-func TestValidateRows_validatesTransmissionCredentialPairsAfterNormalization(t *testing.T) {
+func TestValidateRows_acceptsJavaCompatibleTransmissionCredentialsAfterNormalization(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		username string
 		password string
-		wantErr  bool
 	}{
 		{name: "anonymous", username: "", password: ""},
 		{name: "complete credentials", username: "transmission-user", password: "transmission-password"},
-		{name: "username only", username: "transmission-user", password: "", wantErr: true},
-		{name: "password only", username: "", password: "transmission-password", wantErr: true},
+		{name: "username only", username: "transmission-user", password: ""},
+		{name: "password only", username: "", password: "transmission-password"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// Given
@@ -124,14 +123,11 @@ func TestValidateRows_validatesTransmissionCredentialPairsAfterNormalization(t *
 			err := validateRows(rows)
 
 			// Then
-			if (err != nil) != test.wantErr {
-				t.Fatalf("validateRows() error = %v, wantErr %t", err, test.wantErr)
+			if err != nil {
+				t.Fatalf("validateRows() error = %v", err)
 			}
 			if err == nil && configValue(rows, "transmissionUrl") != "https://transmission.test/transmission/rpc" {
 				t.Fatalf("Transmission URL = %q", configValue(rows, "transmissionUrl"))
-			}
-			if err != nil && ((test.username != "" && strings.Contains(err.Error(), test.username)) || (test.password != "" && strings.Contains(err.Error(), test.password))) {
-				t.Fatalf("validateRows() error leaked credential: %v", err)
 			}
 		})
 	}

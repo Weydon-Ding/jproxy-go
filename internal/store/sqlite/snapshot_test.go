@@ -68,13 +68,13 @@ func TestStoreFormatterSnapshot_normalizesTransmissionValuesAfterReopen(t *testi
 	}
 }
 
-func TestStoreFormatterSnapshot_rejectsIncompleteTransmissionCredentialsWithoutLeakingValue(t *testing.T) {
+func TestStoreFormatterSnapshot_preservesJavaCompatibleTransmissionPasswordWithoutUsername(t *testing.T) {
 	// Given
 	path := javaFinalFixture(t)
 	db := openTestDB(t, path)
 	const credentialCanary = "transmission-password-canary"
 	if _, err := db.Exec(`INSERT INTO system_config (id, "key", value, valid_status) VALUES (13, 'transmissionUrl', 'https://transmission.test', 1), (21, 'transmissionUsername', '', 1), (22, 'transmissionPassword', ?, 1)`, credentialCanary); err != nil {
-		t.Fatalf("seed incomplete Transmission credentials: %v", err)
+		t.Fatalf("seed Java-compatible Transmission credentials: %v", err)
 	}
 	closeTestDB(t, db)
 	store, err := Open(context.Background(), path)
@@ -84,11 +84,14 @@ func TestStoreFormatterSnapshot_rejectsIncompleteTransmissionCredentialsWithoutL
 	t.Cleanup(func() { _ = store.Close() })
 
 	// When
-	_, err = store.FormatterSnapshot(context.Background())
+	snapshot, err := store.FormatterSnapshot(context.Background())
 
 	// Then
-	if err == nil || !strings.Contains(err.Error(), "validate Transmission SQLite formatter snapshot") || strings.Contains(err.Error(), credentialCanary) {
+	if err != nil {
 		t.Fatalf("FormatterSnapshot() error = %v", err)
+	}
+	if snapshot.TransmissionURL != "https://transmission.test/transmission/rpc" || snapshot.TransmissionUsername != "" || snapshot.TransmissionPassword != credentialCanary {
+		t.Fatalf("FormatterSnapshot() = %#v", snapshot)
 	}
 }
 

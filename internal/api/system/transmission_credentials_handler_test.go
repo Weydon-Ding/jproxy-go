@@ -12,17 +12,16 @@ import (
 	"jproxy-go/internal/runtime"
 )
 
-func TestHandler_rejectsIncompleteTransmissionCredentialsWithoutPublishing(t *testing.T) {
+func TestHandler_acceptsJavaCompatibleTransmissionPasswordWithoutUsername(t *testing.T) {
 	// Given
 	store := openSeededStore(t)
 	provider := runtime.NewProvider(snapshot(t, store), store)
 	registry := runtime.NewRegistry(provider, cache.NewTTLCache[string](0, 1), cache.NewTTLCache[[]int](0, 1), cache.NewTTLCache[struct{}](0, 3))
 	handler := system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry})
-	before := provider.Snapshot()
 	payload := completePayload(t, store)
 	for _, row := range payload {
-		if row["key"] == "transmissionUsername" {
-			row["value"] = "user-canary"
+		if row["key"] == "transmissionPassword" {
+			row["value"] = "password-canary"
 		}
 	}
 	body, err := json.Marshal(payload)
@@ -36,7 +35,7 @@ func TestHandler_rejectsIncompleteTransmissionCredentialsWithoutPublishing(t *te
 
 	// Then
 	after := provider.Snapshot()
-	if response.Code != http.StatusBadRequest || after.TransmissionRevision != before.TransmissionRevision || after.TransmissionUsername != before.TransmissionUsername || after.TransmissionPassword != before.TransmissionPassword {
+	if response.Code != http.StatusOK || after.TransmissionUsername != "" || after.TransmissionPassword != "password-canary" {
 		t.Fatalf("status=%d transmission=%q/%q revision=%d", response.Code, after.TransmissionUsername, after.TransmissionPassword, after.TransmissionRevision)
 	}
 }

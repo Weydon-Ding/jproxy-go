@@ -44,9 +44,9 @@ func ParseEndpoint(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// ValidateCredentials accepts anonymous or complete control-character-free credentials.
+// ValidateCredentials accepts Java-compatible control-character-free credentials.
 func ValidateCredentials(username, password string) error {
-	if len(username) > MaxValueLength || len(password) > MaxValueLength || hasControl(username) || hasControl(password) || (username == "") != (password == "") {
+	if len(username) > MaxValueLength || len(password) > MaxValueLength || hasControl(username) || hasControl(password) {
 		return ErrInvalidCredentials
 	}
 	return nil
