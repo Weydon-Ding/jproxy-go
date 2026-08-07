@@ -57,7 +57,6 @@ func TestRun_servesHealthAndShutsDown_whenEnvironmentModeIsCancelled(t *testing.
 		t.Fatalf("Run() error = %v", err)
 	}
 }
-
 func TestLocalVersion_usesReleaseVersionWhenAvailable(t *testing.T) {
 	if actual := localVersion(&debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}}, true); actual != "v1.2.3" {
 		t.Fatalf("release version=%q", actual)
@@ -66,7 +65,6 @@ func TestLocalVersion_usesReleaseVersionWhenAvailable(t *testing.T) {
 		t.Fatalf("development version=%q", actual)
 	}
 }
-
 func TestRun_doesNotListen_whenStoreStartupFails(t *testing.T) {
 	// Given
 	called := false
@@ -235,3 +233,16 @@ func TestConfiguredLogger_omitsSecretAttributes(t *testing.T) {
 	}
 }
 
+func TestConfiguredLogger_includesJob_forTaskRunEvents(t *testing.T) {
+	// Given
+	var output strings.Builder
+	logger := ConfiguredLogger(&output)
+
+	// When
+	logger.Warn("task.run.failed", "job", "sonarr-rename", "error_kind", "task_failed")
+
+	// Then
+	if !strings.Contains(output.String(), `"job":"sonarr-rename"`) {
+		t.Fatalf("log omitted task job: %s", output.String())
+	}
+}

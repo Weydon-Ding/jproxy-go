@@ -92,7 +92,7 @@ func ConfiguredLogger(output io.Writer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{
 		ReplaceAttr: func(_ []string, attribute slog.Attr) slog.Attr {
 			switch attribute.Key {
-			case "time", "level", "msg", "database_enabled", "stage", "error_kind", "hint", "listen_addr":
+			case "time", "level", "msg", "database_enabled", "stage", "error_kind", "hint", "job", "listen_addr":
 				return attribute
 			default:
 				return slog.Attr{}
