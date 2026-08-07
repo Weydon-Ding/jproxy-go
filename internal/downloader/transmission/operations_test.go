@@ -49,6 +49,47 @@ func TestClient_renamesTorrentAndFile_whenRequestsAreValid(t *testing.T) {
 	assertRenameArguments(t, requests[4], "dir/old.mkv", "new.mkv", []int64{7})
 }
 
+func TestClient_Rename_buildsJavaCompatibleTargets_whenTorrentNameHasSupportedExtension(t *testing.T) {
+	hash := "abcdef0123456789abcdef0123456789abcdef01"
+	cases := []struct {
+		name    string
+		oldName string
+		title   string
+		want    string
+	}{
+		{name: "video extension", oldName: "old.mkv", title: "Movie: Director", want: "Movie_ Director.mkv"},
+		{name: "no extension", oldName: "old release", title: "Movie: Director", want: "Movie_ Director"},
+		{name: "subtitle extension", oldName: "old.en.srt", title: "Movie: Director", want: "Movie_ Director.en.srt"},
+		{name: "extension case", oldName: "old.MKV", title: "Movie", want: "Movie"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			// Given
+			var renameRequest receivedRequest
+			upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				received := decodeReceivedRequest(t, request.Body)
+				if received.Method == "torrent-get" {
+					_, _ = io.WriteString(writer, `{"result":"success","arguments":{"torrents":[{"id":7,"name":"`+test.oldName+`","files":[]}]}}`)
+					return
+				}
+				renameRequest = received
+				_, _ = io.WriteString(writer, `{"result":"success","arguments":{"path":"`+test.oldName+`","name":"`+received.Arguments.Name+`","id":7}}`)
+			}))
+			defer upstream.Close()
+			client := testClient(t, &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: upstream.URL, TransmissionUsername: "user", TransmissionPassword: "password"}})
+
+			// When
+			err := client.Rename(context.Background(), hash, test.title)
+
+			// Then
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRenameArguments(t, renameRequest, test.oldName, test.want, []int64{7})
+		})
+	}
+}
+
 func TestClient_rejectsInvalidFileRename_whenPathEscapesSibling(t *testing.T) {
 	// Given
 	client := testClient(t, &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: "http://example.test", TransmissionUsername: "user", TransmissionPassword: "password"}})

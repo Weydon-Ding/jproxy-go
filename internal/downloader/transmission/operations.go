@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"path"
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+var videoAndSubtitleExtension = regexp.MustCompile(`(\.(mp4|avi|wmv|flv|mov|mkv|webm|mpg|mpeg|3gp|iso|ts|([-_a-zA-Z]{2,5}\.|)ass|([-_a-zA-Z]{2,5}\.|)srt|([-_a-zA-Z]{2,5}\.|)ssa|([-_a-zA-Z]{2,5}\.|)idx|([-_a-zA-Z]{2,5}\.|)sub))$`)
 
 type Torrent struct {
 	ID    int64
@@ -160,7 +163,14 @@ func (c *Client) Rename(ctx context.Context, hash, name string) error {
 	if err != nil {
 		return err
 	}
-	return c.renamePath(ctx, cfg, torrent.ID, torrent.Name, name)
+	target := strings.ReplaceAll(name, ":", "_")
+	if matches := videoAndSubtitleExtension.FindStringSubmatch(torrent.Name); len(matches) > 1 {
+		target += matches[1]
+	}
+	if torrent.Name == target {
+		return nil
+	}
+	return c.renamePath(ctx, cfg, torrent.ID, torrent.Name, target)
 }
 
 func (c *Client) RenameFile(ctx context.Context, hash, oldPath, newPath string) error {
