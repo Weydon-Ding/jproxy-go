@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"jproxy-go/internal/transmissionconfig"
 )
 
 const transmissionProxyLimit = 8 << 20
@@ -23,7 +25,7 @@ func (s *Server) handleTransmission(writer http.ResponseWriter, request *http.Re
 		writeTransmissionError(writer, http.StatusBadRequest)
 		return
 	}
-	endpoint, err := transmissionEndpoint(s.provider.Snapshot().TransmissionURL)
+	endpoint, err := transmissionconfig.ParseEndpoint(s.provider.Snapshot().TransmissionURL)
 	if err != nil {
 		writeTransmissionError(writer, http.StatusServiceUnavailable)
 		return
@@ -48,10 +50,7 @@ func (s *Server) handleTransmission(writer http.ResponseWriter, request *http.Re
 	}
 	copyEndToEndHeaders(upstream.Header, request.Header)
 	upstream.Host = ""
-	client := *s.client
-	client.Timeout = timeout + time.Second
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	response, err := client.Do(upstream)
+	response, err := s.transmissionClient().Do(upstream)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			writeTransmissionError(writer, http.StatusGatewayTimeout)
@@ -75,12 +74,27 @@ func (s *Server) handleTransmission(writer http.ResponseWriter, request *http.Re
 	_, _ = writer.Write(responseBody)
 }
 
-func transmissionEndpoint(raw string) (*url.URL, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/transmission/rpc" || parsed.RawPath != "" || strings.IndexFunc(raw, unicode.IsControl) >= 0 {
-		return nil, errors.New("invalid URL")
-	}
-	return parsed, nil
+func (s *Server) transmissionClient() *http.Client {
+	s.transmissionOnce.Do(func() {
+		client := *s.client
+		timeout := s.cfg.HTTPTimeout
+		if timeout <= 0 {
+			timeout = time.Second
+		}
+		client.Timeout = timeout + time.Second
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		transport := client.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		if configured, ok := transport.(*http.Transport); ok {
+			clone := configured.Clone()
+			clone.DisableCompression = true
+			client.Transport = clone
+		}
+		s.transmissionHTTP = &client
+	})
+	return s.transmissionHTTP
 }
 
 func transmissionPath(value *url.URL, escaped string) bool {

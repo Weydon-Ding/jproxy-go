@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"jproxy-go/internal/cache"
 	"jproxy-go/internal/config"
@@ -17,12 +18,14 @@ import (
 )
 
 type Server struct {
-	cfg         config.Config
-	client      *http.Client
-	provider    runtime.Provider
-	resultCache *cache.TTLCache[string]
-	offsetCache *cache.TTLCache[[]int]
-	registry    *runtime.Registry
+	cfg              config.Config
+	client           *http.Client
+	transmissionOnce sync.Once
+	transmissionHTTP *http.Client
+	provider         runtime.Provider
+	resultCache      *cache.TTLCache[string]
+	offsetCache      *cache.TTLCache[[]int]
+	registry         *runtime.Registry
 }
 
 func NewServer(cfg config.Config) *Server {

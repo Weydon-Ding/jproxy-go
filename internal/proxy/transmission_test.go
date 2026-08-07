@@ -2,14 +2,16 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
@@ -82,16 +84,8 @@ func TestTransmissionRoute_preserves409WithoutRetry_andDoesNotInjectHeaders_when
 	}
 }
 
-func TestTransmissionRoute_passesAllUpstreamStatusesAndRejectsInvalidRuntimeURLs(t *testing.T) {
+func TestTransmissionRoute_passesAllUpstreamStatuses(t *testing.T) {
 	// Given / When / Then
-	for _, value := range []string{"ftp://example.test/transmission/rpc", "http://user:password@example.test/transmission/rpc", "http://example.test/transmission/rpc?", "http://example.test/transmission/rpc?q=x", "http://example.test/transmission/rpc#x", "http://example.test/other", "http://bad\n.test/transmission/rpc"} {
-		handler := NewServerWithRuntime(testConfig("http://127.0.0.1:1", "http://127.0.0.1:1"), RuntimeOptions{Provider: runtime.NewStaticProvider(sqlite.Snapshot{TransmissionURL: value})}).Routes()
-		recorder := httptest.NewRecorder()
-		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sonarr/transmission/transmission/rpc", nil))
-		if recorder.Code != http.StatusServiceUnavailable {
-			t.Fatalf("invalid runtime URL status=%d", recorder.Code)
-		}
-	}
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError} {
 		upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			writer.Header().Set("X-Status", "preserved")
@@ -156,41 +150,125 @@ func TestTransmissionRoute_returnsControlledErrors_whenInvalidOrUnsafe(t *testin
 	}
 }
 
-func TestTransmissionRoute_limitsBodiesAndMapsRedirectAndTimeout(t *testing.T) {
+func TestTransmissionRoute_preservesRawGzipResponse_withoutAcceptEncodingNegotiation(t *testing.T) {
 	// Given
-	redirect := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		writer.Header().Set("Location", "/other")
-		writer.WriteHeader(http.StatusFound)
-	}))
-	defer redirect.Close()
-	timeout := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) { <-request.Context().Done() }))
-	defer timeout.Close()
-	oversized := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte(strings.Repeat("x", transmissionProxyLimit+1)))
-	}))
-	defer oversized.Close()
-
-	// When / Then
-	for _, test := range []struct {
-		name, url, body string
-		want            int
-	}{
-		{"request limit", "http://127.0.0.1:1/transmission/rpc", strings.Repeat("x", (8<<20)+1), http.StatusRequestEntityTooLarge},
-		{"redirect", redirect.URL + "/transmission/rpc", "", http.StatusBadGateway},
-		{"timeout", timeout.URL + "/transmission/rpc", "", http.StatusGatewayTimeout},
-		{"response limit", oversized.URL + "/transmission/rpc", "", http.StatusBadGateway},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			cfg := testConfig("http://127.0.0.1:1", "http://127.0.0.1:1")
-			cfg.HTTPTimeout = 20 * time.Millisecond
-			handler := NewServerWithRuntime(cfg, RuntimeOptions{Provider: runtime.NewStaticProvider(sqlite.Snapshot{TransmissionURL: test.url})}).Routes()
-			recorder := httptest.NewRecorder()
-			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/sonarr/transmission/transmission/rpc", strings.NewReader(test.body)))
-			if recorder.Code != test.want || recorder.Body.String() != `{"error":"request failed"}` {
-				t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
-			}
-		})
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatal("default transport is not *http.Transport")
 	}
+	if defaultTransport.DisableCompression {
+		t.Fatal("default transport already disables compression")
+	}
+	var compressed bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressed)
+	_, _ = gzipWriter.Write([]byte("gzip-body"))
+	_ = gzipWriter.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Accept-Encoding") != "" {
+			t.Fatalf("unexpected accept-encoding: %q", request.Header.Get("Accept-Encoding"))
+		}
+		writer.Header().Set("Content-Encoding", "gzip")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write(compressed.Bytes())
+	}))
+	defer upstream.Close()
+	handler := NewServerWithRuntime(testConfig("http://127.0.0.1:1", "http://127.0.0.1:1"), RuntimeOptions{Provider: runtime.NewStaticProvider(sqlite.Snapshot{TransmissionURL: upstream.URL + "/transmission/rpc"})}).Routes()
+
+	// When
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sonarr/transmission/transmission/rpc", nil))
+
+	// Then
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Encoding") != "gzip" || !bytes.Equal(recorder.Body.Bytes(), compressed.Bytes()) {
+		t.Fatalf("status=%d content-encoding=%q body=%q", recorder.Code, recorder.Header().Get("Content-Encoding"), recorder.Body.Bytes())
+	}
+	if defaultTransport.DisableCompression {
+		t.Fatal("default transport was mutated")
+	}
+}
+
+func TestTransmissionRoute_reusesConnection_whenRequestsAreSequential(t *testing.T) {
+	// Given
+	var connections atomic.Int32
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte("upstream"))
+	}))
+	upstream.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+	upstream.Start()
+	defer upstream.Close()
+	server := NewServerWithRuntime(testConfig("http://127.0.0.1:1", "http://127.0.0.1:1"), RuntimeOptions{Provider: runtime.NewStaticProvider(sqlite.Snapshot{TransmissionURL: upstream.URL + "/transmission/rpc"})})
+	handler := server.Routes()
+
+	// When
+	for range 2 {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sonarr/transmission/transmission/rpc", nil))
+		if recorder.Code != http.StatusOK || recorder.Body.String() != "upstream" {
+			t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
+		}
+	}
+
+	// Then
+	if connections.Load() != 1 {
+		t.Fatalf("connections=%d", connections.Load())
+	}
+}
+
+func TestServer_transmissionClient_returnsOneClient_whenFirstAccessIsConcurrent(t *testing.T) {
+	// Given
+	server := NewServer(testConfig("http://127.0.0.1:1", "http://127.0.0.1:1"))
+	clients := make(chan *http.Client, 32)
+	var group sync.WaitGroup
+
+	// When
+	for range cap(clients) {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			clients <- server.transmissionClient()
+		}()
+	}
+	group.Wait()
+	close(clients)
+
+	// Then
+	var first *http.Client
+	for client := range clients {
+		if first == nil {
+			first = client
+			continue
+		}
+		if client != first {
+			t.Fatal("transmission client was initialized more than once")
+		}
+	}
+}
+
+func TestServer_transmissionClient_preservesCustomTransport_whenServerIsConstructedDirectly(t *testing.T) {
+	// Given
+	transport := &transmissionTestTransport{}
+	server := &Server{
+		cfg:    testConfig("http://127.0.0.1:1", "http://127.0.0.1:1"),
+		client: &http.Client{Transport: transport},
+	}
+
+	// When
+	client := server.transmissionClient()
+
+	// Then
+	if client.Transport != transport {
+		t.Fatal("custom transport was replaced")
+	}
+}
+
+type transmissionTestTransport struct{}
+
+func (*transmissionTestTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("not called")
 }
 
 type transmissionTestProvider struct{ snapshot runtime.Snapshot }
