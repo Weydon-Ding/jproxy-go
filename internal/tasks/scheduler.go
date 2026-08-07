@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -179,9 +180,20 @@ func (scheduler *Scheduler) startRun(ctx context.Context, job Job, run func(cont
 		state.mu.Unlock()
 		<-scheduler.semaphore
 		if err != nil && ctx.Err() == nil {
-			scheduler.logger.Warn("task.run.failed", "job", job.Name)
+			scheduler.logger.Warn("task.run.failed", "job", job.Name, "error_kind", taskErrorKind(err))
 		}
 	}()
+}
+
+func taskErrorKind(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	default:
+		return "task_failed"
+	}
 }
 
 func (state *jobState) clearWaiting() {

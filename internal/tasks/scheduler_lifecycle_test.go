@@ -138,6 +138,40 @@ func TestScheduler_LogsFailureAndContinues(t *testing.T) {
 	scheduler.Wait()
 }
 
+func TestScheduler_logsStableFailureKindWithoutTaskErrorText(t *testing.T) {
+	// Given
+	clock := newFakeClock(time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
+	var output syncBuffer
+	output.written = make(chan struct{}, 1)
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	scheduler := NewScheduler(SchedulerOptions{Clock: clock, Logger: logger})
+	schedule, err := EverySeconds(1)
+	if err != nil {
+		t.Fatalf("EverySeconds(): %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := scheduler.Add(Job{Name: "redacted", Schedule: schedule, Run: func(context.Context) error {
+		return errors.New("SUPER_SECRET")
+	}}); err != nil {
+		t.Fatalf("Add(): %v", err)
+	}
+	scheduler.Start(ctx)
+	clock.WaitTimer()
+
+	// When
+	clock.Advance(time.Second)
+	output.WaitWrite()
+
+	// Then
+	log := output.String()
+	if strings.Contains(log, "SUPER_SECRET") || !strings.Contains(log, "job=redacted") || !strings.Contains(log, "error_kind=task_failed") {
+		t.Fatalf("log output = %q", log)
+	}
+	cancel()
+	scheduler.Wait()
+}
+
 func TestScheduler_CancelledWaitingJobNeverRunsAfterSemaphoreAcquisition(t *testing.T) {
 	// Given
 	clock := newFakeClock(time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))

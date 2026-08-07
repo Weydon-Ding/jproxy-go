@@ -24,18 +24,21 @@ func TestRun_servesHealthAndShutsDown_whenEnvironmentModeIsCancelled(t *testing.
 	// Given
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ready := make(chan net.Listener, 1)
+	ready := make(chan struct{})
 	deps := productionDependencies()
+	listenerReady := make(chan net.Listener, 1)
 	deps.listen = func(network, _ string) (net.Listener, error) {
 		listener, err := net.Listen(network, "127.0.0.1:0")
 		if err == nil {
-			ready <- listener
+			listenerReady <- listener
 		}
 		return listener, err
 	}
 	result := make(chan error, 1)
-	go func() { result <- run(ctx, config.Config{Addr: "127.0.0.1:0"}, testLogger(t), deps) }()
-	listener := <-ready
+	logger := slog.New(startedHandler{ready: ready})
+	go func() { result <- run(ctx, config.Config{Addr: "127.0.0.1:0"}, logger, deps) }()
+	listener := <-listenerReady
+	<-ready
 
 	// When
 	response, err := http.Get("http://" + listener.Addr().String() + "/health")
@@ -95,6 +98,10 @@ func TestRun_closesStoreAfterHTTPShutdown_whenDatabaseModeIsCancelled(t *testing
 	deps.newHandler = func(config.Config, runtime.Provider) http.Handler {
 		close(handlerReady)
 		return http.NewServeMux()
+	}
+	deps.newDatabaseRuntime = func(_ config.Config, _ runtime.Provider, _ managementStore, _ *slog.Logger) (databaseRuntime, error) {
+		close(handlerReady)
+		return databaseRuntime{handler: http.NewServeMux()}, nil
 	}
 	result := make(chan error, 1)
 	go func() {
@@ -168,7 +175,7 @@ func TestRun_forcesClose_whenShutdownTimesOut(t *testing.T) {
 	defer cancel()
 	server := &fakeServer{serving: make(chan struct{}), serveDone: make(chan struct{}), shutdownErr: errors.New("shutdown timeout")}
 	deps := productionDependencies()
-	deps.listen = func(string, string) (net.Listener, error) { return fakeListener{}, nil }
+	deps.listen = func(string, string) (net.Listener, error) { return net.Listen("tcp", "127.0.0.1:0") }
 	deps.newServer = func(http.Handler) runtimeServer { return server }
 	deps.shutdownFor = time.Millisecond
 	result := make(chan error, 1)
@@ -193,6 +200,9 @@ func TestRun_returnsStoreCloseError_afterCleanShutdown(t *testing.T) {
 	deps := productionDependencies()
 	deps.openStore = func(context.Context, string) (runtimeStore, error) { return store, nil }
 	deps.listen = func(network, _ string) (net.Listener, error) { return net.Listen(network, "127.0.0.1:0") }
+	deps.newDatabaseRuntime = func(cfg config.Config, provider runtime.Provider, _ managementStore, _ *slog.Logger) (databaseRuntime, error) {
+		return databaseRuntime{handler: deps.newHandler(cfg, provider)}, nil
+	}
 	result := make(chan error, 1)
 	go func() {
 		result <- run(ctx, config.Config{Addr: "127.0.0.1:0", Database: config.DatabaseConfig{Enabled: true, Path: "temp.db"}}, testLogger(t), deps)
@@ -240,7 +250,8 @@ type fakeServer struct {
 	closed         bool
 }
 
-func (s *fakeServer) Serve(net.Listener) error {
+func (s *fakeServer) Serve(listener net.Listener) error {
+	_, _ = listener.Accept()
 	close(s.serving)
 	<-s.serveDone
 	return http.ErrServerClosed
@@ -262,6 +273,18 @@ type fakeListener struct{}
 func (fakeListener) Accept() (net.Conn, error) { return nil, net.ErrClosed }
 func (fakeListener) Close() error              { return nil }
 func (fakeListener) Addr() net.Addr            { return &net.TCPAddr{} }
+
+type startedHandler struct{ ready chan<- struct{} }
+
+func (handler startedHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (handler startedHandler) Handle(_ context.Context, record slog.Record) error {
+	if record.Message == "application.started" {
+		handler.ready <- struct{}{}
+	}
+	return nil
+}
+func (handler startedHandler) WithAttrs([]slog.Attr) slog.Handler { return handler }
+func (handler startedHandler) WithGroup(string) slog.Handler      { return handler }
 
 func (s *fakeStore) Close() error {
 	s.closed = true

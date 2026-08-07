@@ -15,7 +15,6 @@ import (
 	"jproxy-go/internal/proxy"
 	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
-	"jproxy-go/internal/ui"
 )
 
 const shutdownTimeout = 5 * time.Second
@@ -28,11 +27,13 @@ type runtimeStore interface {
 }
 
 type runtimeDependencies struct {
-	openStore   func(context.Context, string) (runtimeStore, error)
-	listen      func(string, string) (net.Listener, error)
-	newHandler  func(config.Config, runtime.Provider) http.Handler
-	newServer   func(http.Handler) runtimeServer
-	shutdownFor time.Duration
+	openStore          func(context.Context, string) (runtimeStore, error)
+	listen             func(string, string) (net.Listener, error)
+	newHandler         func(config.Config, runtime.Provider) http.Handler
+	newDatabaseRuntime func(config.Config, runtime.Provider, managementStore, *slog.Logger) (databaseRuntime, error)
+	newServer          func(http.Handler) runtimeServer
+	dial               dialContextFunc
+	shutdownFor        time.Duration
 }
 
 type runtimeServer interface {
@@ -80,17 +81,6 @@ func FailureKindOf(err error) FailureKind {
 	}
 }
 
-func storeFailureKind(err error) FailureKind {
-	switch {
-	case errors.Is(err, sqlite.ErrWriterOwned):
-		return FailureWriterOwned
-	case errors.Is(err, sqlite.ErrIncompatibleSchema):
-		return FailureIncompatibleDB
-	default:
-		return FailureStore
-	}
-}
-
 // Run opens all required resources before listening and closes them in reverse
 // dependency order after ctx is cancelled.
 func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
@@ -117,13 +107,12 @@ func productionDependencies() runtimeDependencies {
 		listen:    net.Listen,
 		newHandler: func(cfg config.Config, provider runtime.Provider) http.Handler {
 			server := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
-			if !cfg.Database.Enabled {
-				return server.Routes()
-			}
 			return server.Routes()
 		},
-		newServer:   func(handler http.Handler) runtimeServer { return &http.Server{Handler: handler} },
-		shutdownFor: shutdownTimeout,
+		newDatabaseRuntime: composeDatabaseRuntime,
+		newServer:          func(handler http.Handler) runtimeServer { return &http.Server{Handler: handler} },
+		dial:               dialContext,
+		shutdownFor:        shutdownTimeout,
 	}
 }
 
@@ -153,6 +142,9 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 	var serveErr error
 	serveDone := false
 	var provider runtime.Provider
+	var tasks taskRuntime
+	tasksStarted := false
+	committed := false
 
 	if cfg.Database.Enabled {
 		store, runErr = deps.openStore(appCtx, cfg.Database.Path)
@@ -163,107 +155,114 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger, deps runti
 		_ = store.Repositories()
 		snapshot, snapshotErr := store.FormatterSnapshot(appCtx)
 		if snapshotErr != nil {
-			return cleanup(cancel, store, listener, server, served, false, failure{FailureSnapshot, snapshotErr}, deps.shutdownFor)
+			return cleanup(cancel, nil, store, listener, server, served, false, failure{FailureSnapshot, snapshotErr}, deps.shutdownFor)
 		}
 		provider = runtime.NewProvider(snapshot, store)
 	}
 	if err := ctx.Err(); err != nil {
-		return cleanup(cancel, store, listener, server, served, false, failure{FailureCleanup, err}, deps.shutdownFor)
+		return cleanup(cancel, nil, store, listener, server, served, false, failure{FailureCleanup, err}, deps.shutdownFor)
 	}
 
-	handler := deps.newHandler(cfg, provider)
+	var handler http.Handler
 	if cfg.Database.Enabled {
 		managementStore, ok := store.(managementStore)
 		if !ok {
-			return cleanup(cancel, store, listener, server, served, false, failure{FailureStore, errors.New("management store unavailable")}, deps.shutdownFor)
+			return cleanup(cancel, nil, store, listener, server, served, false, failure{FailureStore, errors.New("management store unavailable")}, deps.shutdownFor)
 		}
-		handler = rootHandler(cfg, provider, managementStore)
+		database, composeErr := deps.newDatabaseRuntime(cfg, provider, managementStore, logger)
+		if composeErr != nil {
+			return cleanup(cancel, nil, store, listener, server, served, false, failure{FailureStore, composeErr}, deps.shutdownFor)
+		}
+		handler = database.handler
+		tasks = database.tasks
+	} else {
+		handler = deps.newHandler(cfg, provider)
 	}
 	listener, runErr = deps.listen("tcp", cfg.Addr)
 	if runErr != nil {
-		return cleanup(cancel, store, listener, server, served, false, failure{FailureListen, runErr}, deps.shutdownFor)
+		return cleanup(cancel, nil, store, listener, server, served, false, failure{FailureListen, runErr}, deps.shutdownFor)
 	}
 	server = deps.newServer(handler)
-	result := make(chan error, 1)
-	served = result
-	go func() { result <- server.Serve(listener) }()
-	logger.Info("application.started", "database_enabled", cfg.Database.Enabled, "listen_addr", listener.Addr().String())
-
-	select {
-	case serveErr = <-served:
-		serveDone = true
-		if !errors.Is(serveErr, http.ErrServerClosed) {
-			runErr = failure{FailureServe, serveErr}
-		}
-	case <-ctx.Done():
-	}
-	return cleanup(cancel, store, listener, server, served, serveDone, runErr, deps.shutdownFor)
-}
-
-func rootHandler(cfg config.Config, provider runtime.Provider, store managementStore) http.Handler {
-	return rootHandlerWithSyncDependencies(cfg, provider, store, managementSyncDependencies{})
-}
-
-type managementSyncDependencies struct {
-	title titleSyncDependencies
-	rule  ruleSyncDependencies
-}
-
-func rootHandlerWithSyncDependencies(cfg config.Config, provider runtime.Provider, store managementStore, dependencies managementSyncDependencies) http.Handler {
-	proxyServer := proxy.NewServerWithRuntime(cfg, proxy.RuntimeOptions{Provider: provider})
-	if !cfg.Database.Enabled {
-		return proxyServer.Routes()
-	}
-	root := http.NewServeMux()
-	registry := proxyServer.CacheRegistry()
-	if dependencies.title.admission == nil {
-		dependencies.title = liveTitleSyncDependencies(cfg, store, registry)
-	}
-	if dependencies.rule.sonarr == nil && dependencies.rule.radarr == nil {
-		dependencies.rule = liveRuleSyncDependencies(cfg, store, func(ctx context.Context, name string) error { return registry.Invalidate(ctx, name) })
-	}
-	management, err := securedManagementRoutes(cfg, store, provider, registry, dependencies.title, dependencies.rule)
-	if err != nil {
-		return http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-			http.Error(writer, "service unavailable", http.StatusServiceUnavailable)
-		})
-	}
-	// Mount UI handler for admin console
-	uiHandler := ui.NewHandler()
-	root.Handle("/", uiHandler)
-	root.Handle("/api/", management)
-	// Proxy routes must come after UI to avoid conflicts
-	proxyRoutes := proxyServer.Routes()
-	root.Handle("/sonarr/", proxyRoutes)
-	root.Handle("/radarr/", proxyRoutes)
-	root.Handle("/health", proxyRoutes)
-	return root
-}
-
-func cleanup(cancel context.CancelFunc, store runtimeStore, listener net.Listener, server runtimeServer, served <-chan error, serveDone bool, runErr error, timeout time.Duration) error {
-	cancel()
-	var cleanupErr error
-	if server != nil && !serveDone {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
-		shutdownErr := server.Shutdown(shutdownCtx)
-		shutdownCancel()
-		if shutdownErr != nil {
-			kind := FailureCleanup
-			if errors.Is(shutdownErr, context.DeadlineExceeded) {
-				kind = FailureShutdownTimeout
+	serving := startServe(appCtx, listener, server, deps.shutdownFor, deps.dial)
+	served = serving.served
+	var probeResults <-chan error = serving.probeResults
+	deciding := true
+	for deciding {
+		select {
+		case serveErr = <-served:
+			serveDone = true
+			if !errors.Is(serveErr, http.ErrServerClosed) {
+				runErr = failure{FailureServe, serveErr}
 			}
-			cleanupErr = failure{kind, errors.Join(shutdownErr, server.Close())}
+			deciding = false
+		case probeErr := <-probeResults:
+			probeResults = nil
+			if probeErr != nil {
+				runErr = failure{FailureServe, probeErr}
+				serving.abort()
+				deciding = false
+			}
+		case <-serving.listener.ready:
+			if ctx.Err() != nil {
+				serving.abort()
+				deciding = false
+				break
+			}
+			select {
+			case serveErr = <-served:
+				serveDone = true
+				if !errors.Is(serveErr, http.ErrServerClosed) {
+					runErr = failure{FailureServe, serveErr}
+				}
+				deciding = false
+			case probeErr := <-probeResults:
+				probeResults = nil
+				if probeErr != nil {
+					runErr = failure{FailureServe, probeErr}
+					serving.abort()
+					deciding = false
+				}
+			default:
+			}
+			if !deciding || ctx.Err() != nil {
+				serving.abort()
+				deciding = false
+				break
+			}
+			if ctx.Err() != nil || appCtx.Err() != nil {
+				serving.abort()
+				deciding = false
+				break
+			}
+			if tasks != nil {
+				tasks.Start(appCtx)
+				tasksStarted = true
+			}
+			serving.commit()
+			committed = true
+			logger.Info("application.started", "database_enabled", cfg.Database.Enabled, "listen_addr", listener.Addr().String())
+			deciding = false
+		case <-ctx.Done():
+			serving.abort()
+			deciding = false
 		}
-		if serveErr := <-served; !errors.Is(serveErr, http.ErrServerClosed) {
-			cleanupErr = errors.Join(cleanupErr, failure{FailureServe, serveErr})
-		}
-	} else if listener != nil {
-		cleanupErr = listener.Close()
 	}
-	if store != nil {
-		if closeErr := store.Close(); closeErr != nil {
-			cleanupErr = errors.Join(cleanupErr, failure{FailureCleanup, closeErr})
+	if !tasksStarted && !serveDone {
+		serving.abort()
+	}
+	if committed && !serveDone {
+		select {
+		case serveErr = <-served:
+			serveDone = true
+			if !errors.Is(serveErr, http.ErrServerClosed) {
+				runErr = failure{FailureServe, serveErr}
+			}
+		case <-ctx.Done():
 		}
 	}
-	return errors.Join(runErr, cleanupErr)
+
+	if !tasksStarted {
+		tasks = nil
+	}
+	return cleanup(cancel, tasks, store, listener, server, served, serveDone, runErr, deps.shutdownFor)
 }

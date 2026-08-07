@@ -30,12 +30,17 @@ type Config struct {
 	RadarrFormatting      RadarrFormattingConfig
 	SonarrFormatting      SonarrFormattingConfig
 	Auth                  AuthConfig
+	Task                  TaskConfig
 }
 
 type AuthConfig struct {
 	LoginEnabled        bool
 	JWTSecret           string
 	TokenExpiresMinutes int
+}
+
+type TaskConfig struct {
+	RenameFiles bool
 }
 
 // DatabaseConfig selects the long-lived writable SQLite application store.
@@ -91,6 +96,11 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	renameFiles, err := envBool("RENAME_FILE", true)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Task.RenameFiles = renameFiles
 	if dbEnabled {
 		path := strings.TrimSpace(os.Getenv("JPROXY_DB_PATH"))
 		if path == "" {
