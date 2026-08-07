@@ -18,7 +18,7 @@ func TestHistoryClient_Fetch_usesExactQueryAndParsesEvents(t *testing.T) {
 		if request.URL.Path != "/api/v3/history/since" || request.URL.RawQuery != "apikey=secret&date=2026-08-07T12%3A00%3A00.000Z&eventType=1" {
 			t.Fatalf("request = %s", request.URL.String())
 		}
-		_, _ = writer.Write([]byte(`[{"sourceTitle":"Release","downloadId":"ABC","data":{"downloadClient":"Transmission"}}]`))
+		_, _ = writer.Write([]byte(`[{"sourceTitle":"Release","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":"Transmission"}}]`))
 	}))
 	defer server.Close()
 	client, err := NewHistoryClient(HistoryClientOptions{HTTPClient: server.Client(), Timeout: time.Second})
@@ -30,15 +30,22 @@ func TestHistoryClient_Fetch_usesExactQueryAndParsesEvents(t *testing.T) {
 	events, err := client.Fetch(context.Background(), server.URL, "secret", since)
 
 	// Then
-	if err != nil || !reflect.DeepEqual(events, []Event{{SourceTitle: "Release", Hash: "abc", Downloader: DownloaderTransmission}}) {
+	if err != nil || !reflect.DeepEqual(events, []Event{{SourceTitle: "Release", Hash: "abcdef0123456789abcdef0123456789abcdef01", Downloader: DownloaderTransmission}}) {
 		t.Fatalf("Fetch() = %#v, %v", events, err)
 	}
 }
 
-func TestHistoryClient_Fetch_defaultsUnknownDownloaderToQBittorrent(t *testing.T) {
+func TestHistoryClient_Fetch_admitsOnlyExplicitTorrentDownloaders(t *testing.T) {
 	// Given
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte(`[{"sourceTitle":"Release","downloadId":"ABC","data":{"downloadClient":"unsupported"}}]`))
+		_, _ = writer.Write([]byte(`[
+			{"sourceTitle":"qB","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":"qBiTtOrReNt"}},
+			{"sourceTitle":"Transmission","downloadId":"0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF","data":{"downloadClient":"Transmission"}},
+			{"sourceTitle":"SAB","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":"SABnzbd"}},
+			{"sourceTitle":"NZB","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":"NZBGet"}},
+			{"sourceTitle":"Blank","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":" "}},
+			{"sourceTitle":"Typo","downloadId":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","data":{"downloadClient":"Transmi\u0073ion"}}
+		]`))
 	}))
 	defer server.Close()
 	client, err := NewHistoryClient(HistoryClientOptions{HTTPClient: server.Client(), Timeout: time.Second})
@@ -50,7 +57,37 @@ func TestHistoryClient_Fetch_defaultsUnknownDownloaderToQBittorrent(t *testing.T
 	events, err := client.Fetch(context.Background(), server.URL, "secret", time.Unix(0, 0))
 
 	// Then
-	if err != nil || !reflect.DeepEqual(events, []Event{{SourceTitle: "Release", Hash: "abc", Downloader: DownloaderQBittorrent}}) {
+	want := []Event{
+		{SourceTitle: "qB", Hash: "abcdef0123456789abcdef0123456789abcdef01", Downloader: DownloaderQBittorrent},
+		{SourceTitle: "Transmission", Hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Downloader: DownloaderTransmission},
+	}
+	if err != nil || !reflect.DeepEqual(events, want) {
+		t.Fatalf("Fetch() = %#v, %v", events, err)
+	}
+}
+
+func TestHistoryClient_Fetch_skipsMalformedTorrentHashes(t *testing.T) {
+	// Given
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`[
+			{"sourceTitle":"short","downloadId":"abcdef0123456789abcdef0123456789abcdef","data":{"downloadClient":"qBittorrent"}},
+			{"sourceTitle":"long","downloadId":"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01","data":{"downloadClient":"Transmission"}},
+			{"sourceTitle":"nonhex","downloadId":"abcdef0123456789abcdef0123456789abcdef0z","data":{"downloadClient":"qBittorrent"}},
+			{"sourceTitle":"fallback","downloadId":"","data":{"torrentInfoHash":"ABCDEF0123456789ABCDEF0123456789ABCDEF01","downloadClient":"Transmission"}}
+		]`))
+	}))
+	defer server.Close()
+	client, err := NewHistoryClient(HistoryClientOptions{HTTPClient: server.Client(), Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// When
+	events, err := client.Fetch(context.Background(), server.URL, "secret", time.Unix(0, 0))
+
+	// Then
+	want := []Event{{SourceTitle: "fallback", Hash: "ABCDEF0123456789ABCDEF0123456789ABCDEF01", Downloader: DownloaderTransmission}}
+	if err != nil || !reflect.DeepEqual(events, want) {
 		t.Fatalf("Fetch() = %#v, %v", events, err)
 	}
 }

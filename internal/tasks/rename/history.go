@@ -108,12 +108,17 @@ func decodeHistory(body []byte) ([]Event, error) {
 		} else {
 			hash = strings.ToLower(hash)
 		}
-		if strings.TrimSpace(row.SourceTitle) == "" || hash == "" || hasControl(row.SourceTitle) || hasControl(hash) {
+		if strings.TrimSpace(row.SourceTitle) == "" || !validTorrentHash(hash) || hasControl(row.SourceTitle) {
 			continue
 		}
-		downloadClient := DownloaderQBittorrent
-		if strings.EqualFold(row.Data.DownloadClient, "Transmission") {
+		var downloadClient Downloader
+		switch {
+		case strings.EqualFold(row.Data.DownloadClient, "qBittorrent"):
+			downloadClient = DownloaderQBittorrent
+		case strings.EqualFold(row.Data.DownloadClient, "Transmission"):
 			downloadClient = DownloaderTransmission
+		default:
+			continue
 		}
 		events = append(events, Event{SourceTitle: row.SourceTitle, Hash: hash, Downloader: downloadClient})
 	}
@@ -135,3 +140,15 @@ func historyRequestError(parent, request context.Context, err error) error {
 }
 
 func hasControl(value string) bool { return strings.IndexFunc(value, unicode.IsControl) >= 0 }
+
+func validTorrentHash(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if !('0' <= character && character <= '9') && !('a' <= character && character <= 'f') && !('A' <= character && character <= 'F') {
+			return false
+		}
+	}
+	return true
+}

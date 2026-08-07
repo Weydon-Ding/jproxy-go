@@ -11,7 +11,9 @@ import (
 func TestService_RunSonarr_stopsBeforeNextEventWhenCancelled(t *testing.T) {
 	// Given
 	ctx, cancel := context.WithCancel(context.Background())
-	history := fakeHistory{events: []Event{{SourceTitle: "first", Hash: "abc", Downloader: DownloaderQBittorrent}, {SourceTitle: "second", Hash: "def", Downloader: DownloaderQBittorrent}}}
+	hashOne := "abcdef0123456789abcdef0123456789abcdef01"
+	hashTwo := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	history := fakeHistory{events: []Event{{SourceTitle: "first", Hash: hashOne, Downloader: DownloaderQBittorrent}, {SourceTitle: "second", Hash: hashTwo, Downloader: DownloaderQBittorrent}}}
 	qb := &fakeQB{cancel: cancel}
 	service, err := NewService(ServiceOptions{History: history, QBittorrent: qb, Now: fixedNow})
 	if err != nil {
@@ -22,7 +24,7 @@ func TestService_RunSonarr_stopsBeforeNextEventWhenCancelled(t *testing.T) {
 	err = service.RunSonarr(ctx, Endpoint{}, time.Minute)
 
 	// Then
-	if !errors.Is(err, context.Canceled) || !reflect.DeepEqual(qb.renames, []string{"abc:first"}) {
+	if !errors.Is(err, context.Canceled) || !reflect.DeepEqual(qb.renames, []string{hashOne + ":first"}) {
 		t.Fatalf("err=%v renames=%#v", err, qb.renames)
 	}
 }

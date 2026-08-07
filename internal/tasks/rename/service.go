@@ -63,7 +63,7 @@ func (s *Service) run(ctx context.Context, endpoint Endpoint, fallback time.Dura
 		if err := ctx.Err(); err != nil {
 			return errors.Join(result, err)
 		}
-		if strings.TrimSpace(event.Hash) == "" || !validName(event.SourceTitle) || hasControl(event.Hash) {
+		if !validTorrentHash(event.Hash) || !validName(event.SourceTitle) {
 			continue
 		}
 		if deduplicate {
