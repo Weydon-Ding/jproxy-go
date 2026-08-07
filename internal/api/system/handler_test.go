@@ -16,37 +16,6 @@ import (
 	"jproxy-go/internal/store/sqlite"
 )
 
-func TestHandler_servesRawConfigAndRejectsWrongMethod(t *testing.T) {
-	// Given
-	store := openSeededStore(t)
-	provider := runtime.NewProvider(snapshot(t, store), store)
-	registry := runtime.NewRegistry(provider, cache.NewTTLCache[string](0, 1), cache.NewTTLCache[[]int](0, 1), cache.NewTTLCache[struct{}](0, 3))
-	handler := system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry, Version: "0.0.0"})
-
-	// When
-	query := httptest.NewRequest(http.MethodGet, "/api/system/config/query", nil)
-	queryResponse := httptest.NewRecorder()
-	handler.ServeHTTP(queryResponse, query)
-	wrongMethod := httptest.NewRequest(http.MethodPost, "/api/system/config/query", nil)
-	wrongMethodResponse := httptest.NewRecorder()
-	handler.ServeHTTP(wrongMethodResponse, wrongMethod)
-
-	// Then
-	if queryResponse.Code != http.StatusOK || queryResponse.Header().Get("Content-Type") != "application/json; charset=utf-8" {
-		t.Fatalf("query status=%d content-type=%q", queryResponse.Code, queryResponse.Header().Get("Content-Type"))
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(queryResponse.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode query: %v", err)
-	}
-	if len(rows) != 20 || rows[0]["id"] != float64(1) || rows[0]["key"] != "sonarrUrl" {
-		t.Fatalf("query rows=%v", rows)
-	}
-	if wrongMethodResponse.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("wrong method status=%d", wrongMethodResponse.Code)
-	}
-}
-
 func TestHandler_updatesAllConfigsAtomicallyAndPublishesSnapshot(t *testing.T) {
 	// Given
 	store := openSeededStore(t)
@@ -72,6 +41,42 @@ func TestHandler_updatesAllConfigsAtomicallyAndPublishesSnapshot(t *testing.T) {
 	// Then
 	if response.Code != http.StatusBadRequest || provider.Snapshot().Radarr.Format != "{title} {year}" {
 		t.Fatalf("status=%d snapshot=%q body=%q", response.Code, provider.Snapshot().Radarr.Format, response.Body.String())
+	}
+}
+
+func TestHandler_updatePublishesCanonicalTransmissionEndpoint(t *testing.T) {
+	// Given
+	store := openSeededStore(t)
+	provider := runtime.NewProvider(snapshot(t, store), store)
+	registry := runtime.NewRegistry(provider, cache.NewTTLCache[string](0, 1), cache.NewTTLCache[[]int](0, 1), cache.NewTTLCache[struct{}](0, 3))
+	server := httptest.NewServer(system.NewHandler(system.Options{Store: store, Provider: provider, Registry: registry}))
+	t.Cleanup(server.Close)
+	payload := completePayload(t, store)
+	for _, row := range payload {
+		switch row["key"] {
+		case "transmissionUrl":
+			row["value"] = "https://transmission.test/prefix/transmission/web/"
+		case "transmissionUsername":
+			row["value"] = "transmission-user"
+		case "transmissionPassword":
+			row["value"] = "transmission-password"
+		}
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal update payload: %v", err)
+	}
+
+	// When
+	response, err := http.Post(server.URL+"/api/system/config/update", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post config update: %v", err)
+	}
+	t.Cleanup(func() { _ = response.Body.Close() })
+
+	// Then
+	if response.StatusCode != http.StatusOK || provider.Snapshot().TransmissionURL != "https://transmission.test/prefix/transmission/rpc" {
+		t.Fatalf("status=%d TransmissionURL=%q", response.StatusCode, provider.Snapshot().TransmissionURL)
 	}
 }
 

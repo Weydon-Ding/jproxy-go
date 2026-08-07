@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -13,6 +14,7 @@ import (
 
 	"jproxy-go/internal/runtime"
 	"jproxy-go/internal/store/sqlite"
+	"jproxy-go/internal/transmissionconfig"
 )
 
 const maxBodyBytes = 256 * 1024
@@ -96,11 +98,21 @@ func (h *Handler) query(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	sort.Slice(rows, func(left, right int) bool { return rows[left].ID < rows[right].ID })
-	writeJSON(writer, http.StatusOK, rows)
+	writeJSON(writer, http.StatusOK, maskedRows(rows))
 }
 
 func (h *Handler) update(writer http.ResponseWriter, request *http.Request) {
 	rows, err := decodeRows(request)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest)
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	current, err := h.options.Store.Repositories().SystemConfigs.List(request.Context())
+	if err == nil {
+		err = restoreMaskedSecrets(rows, current)
+	}
 	if err == nil {
 		err = validateRows(rows)
 	}
@@ -108,8 +120,6 @@ func (h *Handler) update(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest)
 		return
 	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	snapshot, err := h.options.Store.UpdateSystemConfigs(request.Context(), rows)
 	if err != nil {
 		writeError(writer, statusFor(err))
@@ -160,6 +170,8 @@ func decodeRows(request *http.Request) ([]sqlite.SystemConfig, error) {
 		Key         string  `json:"key"`
 		Value       *string `json:"value"`
 		ValidStatus *int64  `json:"validStatus"`
+		CreateTime  *string `json:"createTime"`
+		UpdateTime  *string `json:"updateTime"`
 	}
 	if err := decodeJSON(request, &inputs); err != nil {
 		return nil, err
@@ -193,7 +205,19 @@ func validateRows(rows []sqlite.SystemConfig) error {
 		rows[index].ValidStatus = sqlite.Valid
 		seen[id] = true
 	}
+	if err := transmissionconfig.ValidateCredentials(configValue(rows, "transmissionUsername"), configValue(rows, "transmissionPassword")); err != nil {
+		return fmt.Errorf("invalid Transmission credentials: %w", err)
+	}
 	return nil
+}
+
+func configValue(rows []sqlite.SystemConfig, key string) string {
+	for _, row := range rows {
+		if row.Key == key && row.Value != nil {
+			return *row.Value
+		}
+	}
+	return ""
 }
 
 func decodeJSON(request *http.Request, target any) error {

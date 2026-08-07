@@ -6,6 +6,8 @@ type Config struct {
 	Value string
 }
 
+const maskedSecret = "******"
+
 var configs = []Config{
 	{1, "sonarrUrl", ""}, {2, "sonarrApikey", ""}, {3, "sonarrIndexerFormat", "{title} {season} {episode}"},
 	{5, "sonarrLanguage1", "zh-CN"}, {6, "sonarrLanguage2", "zh-TW"}, {7, "radarrUrl", ""},
@@ -25,4 +27,13 @@ func configByID(id int64) (Config, bool) {
 		}
 	}
 	return Config{}, false
+}
+
+func isSensitiveConfigKey(key string) bool {
+	switch key {
+	case "sonarrApikey", "radarrApikey", "tmdbApikey", "qbittorrentPassword", "transmissionPassword":
+		return true
+	default:
+		return false
+	}
 }
