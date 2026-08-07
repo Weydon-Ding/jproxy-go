@@ -53,6 +53,11 @@ func New(options Options) (*Client, error) {
 	clone := *client
 	clone.Timeout = options.Timeout
 	clone.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	clone.Transport = signalingRoundTripper{next: transport}
 	return &Client{provider: options.Provider, http: &clone}, nil
 }
 
@@ -157,8 +162,13 @@ func (c *Client) login(ctx context.Context, reuse bool) error {
 }
 
 func (c *Client) do(ctx context.Context, cfg config, method, path, form string, saved cookie) (*http.Response, error) {
+	return c.doStarted(ctx, cfg, method, path, form, saved, nil)
+}
+
+func (c *Client) doStarted(ctx context.Context, cfg config, method, path, form string, saved cookie, started chan<- error) (*http.Response, error) {
 	relative, err := url.Parse(path)
 	if err != nil {
+		notifyStart(started, ErrInvalidConfig)
 		return nil, ErrInvalidConfig
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, c.http.Timeout)
@@ -174,6 +184,7 @@ func (c *Client) do(ctx context.Context, cfg config, method, path, form string, 
 	req, err := http.NewRequestWithContext(requestCtx, method, target.String(), body)
 	if err != nil {
 		cancel()
+		notifyStart(started, ErrInvalidConfig)
 		return nil, ErrInvalidConfig
 	}
 	if form != "" {
@@ -182,9 +193,13 @@ func (c *Client) do(ctx context.Context, cfg config, method, path, form string, 
 	if saved.value != "" {
 		req.AddCookie(&http.Cookie{Name: saved.name, Value: saved.value})
 	}
+	if started != nil {
+		req = req.WithContext(context.WithValue(req.Context(), mutationStartKey{}, started))
+	}
 	response, err := c.http.Do(req)
 	if err != nil {
 		cancel()
+		notifyStart(started, ErrTransport)
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, context.Canceled
 		}
@@ -204,6 +219,16 @@ func (c *Client) do(ctx context.Context, cfg config, method, path, form string, 
 	}
 	response.Body = cancelOnClose{ReadCloser: response.Body, cancel: cancel}
 	return response, nil
+}
+
+func notifyStart(started chan<- error, err error) {
+	if started == nil {
+		return
+	}
+	select {
+	case started <- err:
+	default:
+	}
 }
 
 type cancelOnClose struct {

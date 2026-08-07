@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -44,25 +45,17 @@ func (c *Client) Files(ctx context.Context, hash string) ([]string, error) {
 }
 
 func (c *Client) Rename(ctx context.Context, hash, name string) error {
-	if invalidArgument(hash) || invalidArgument(name) {
+	if invalidArgument(hash) || !validRenameName(name) {
 		return ErrInvalidConfig
 	}
-	return c.post(ctx, "/api/v2/torrents/rename", url.Values{"hash": {hash}, "name": {name}})
+	return c.postMutation(ctx, "/api/v2/torrents/rename", url.Values{"hash": {hash}, "name": {name}})
 }
 
 func (c *Client) RenameFile(ctx context.Context, hash, oldPath, newPath string) error {
-	if invalidArgument(hash) || invalidArgument(oldPath) || invalidArgument(newPath) {
+	if invalidArgument(hash) || !validFilePath(oldPath) || !validFilePath(newPath) {
 		return ErrInvalidConfig
 	}
-	return c.post(ctx, "/api/v2/torrents/renameFile", url.Values{"hash": {hash}, "oldPath": {oldPath}, "newPath": {newPath}})
-}
-
-func (c *Client) post(ctx context.Context, path string, values url.Values) error {
-	response, err := c.authenticated(ctx, http.MethodPost, path, values.Encode())
-	if err != nil {
-		return err
-	}
-	return response.Body.Close()
+	return c.postMutation(ctx, "/api/v2/torrents/renameFile", url.Values{"hash": {hash}, "oldPath": {oldPath}, "newPath": {newPath}})
 }
 
 func (c *Client) authenticated(ctx context.Context, method, path, form string) (*http.Response, error) {
@@ -102,3 +95,19 @@ func (c *Client) authenticated(ctx context.Context, method, path, form string) (
 }
 
 func invalidArgument(value string) bool { return value == "" || containsControl(value) }
+
+func validRenameName(value string) bool {
+	return value != "" && strings.TrimSpace(value) != "" && !containsControl(value) && !strings.ContainsAny(value, `/\`) && value != "." && value != ".."
+}
+
+func validFilePath(value string) bool {
+	if value == "" || containsControl(value) || strings.Contains(value, `\`) || strings.HasPrefix(value, "/") || path.Clean(value) != value {
+		return false
+	}
+	for _, component := range strings.Split(value, "/") {
+		if component == "." || component == ".." || component == "" {
+			return false
+		}
+	}
+	return true
+}

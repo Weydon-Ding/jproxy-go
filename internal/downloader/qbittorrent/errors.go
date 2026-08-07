@@ -11,6 +11,7 @@ var (
 	ErrResponseTooLarge  = errors.New("qBittorrent response too large")
 	ErrMalformedResponse = errors.New("qBittorrent malformed response")
 	ErrTransport         = errors.New("qBittorrent transport failed")
+	ErrConfigChanged     = errors.New("qBittorrent configuration changed")
 )
 
 type HTTPError struct {
