@@ -23,6 +23,27 @@ type SonarrConfig struct {
 	Titles          []SonarrTitle
 }
 
+// FormatTokens applies Java-compatible Sonarr token rules to a filename template.
+//
+//revive:disable-next-line:exported required public API name.
+func FormatTokens(text, template string, rules []Rule) string {
+	formatted := template
+	byToken := rulesByToken(rules)
+	for _, token := range tokenRE.FindAllStringSubmatch(template, -1) {
+		for _, rule := range byToken[token[1]] {
+			re := regexp.MustCompile(rule.Regex)
+			if re.MatchString(text) {
+				formatted = ReplaceToken(rule.Token, ExecuteOffset(re.ReplaceAllString(text, rule.Replacement), rule.Offset), formatted)
+				break
+			}
+		}
+	}
+	if strings.Contains(formatted, "{episode}") {
+		return text
+	}
+	return strings.TrimSpace(RemoveAllTokens(formatted))
+}
+
 // ValidateSonarrConfig ensures static Sonarr rules and title data can be compiled at startup.
 func ValidateSonarrConfig(cfg SonarrConfig) error {
 	if err := ValidateConfig(Config{Format: cfg.Format, CleanTitleRegex: cfg.CleanTitleRegex, Rules: cfg.Rules}); err != nil {
