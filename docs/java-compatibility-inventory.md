@@ -98,8 +98,8 @@ mapping. All Java management routes are pending migration unless noted otherwise
 | `SonarrTitleServiceImpl` / `RadarrTitleServiceImpl` | sync, query, title lookup, formatting support | Implemented in Go | DB-mode sync rereads persisted configuration every request and atomically removes stale rows. Atomic replacement intentionally differs from Java upsert-only sync. |
 | `TmdbTitleServiceImpl` | TMDB find, sync, page query | Implemented in Go | DB-mode save/query/remove APIs; sync returns 503 until Todo10 installs a real adapter. |
 | `SystemUserServiceImpl` | password check, JWT sign/verify/logout, user retrieval/update | Implemented in Go | Todo 11 provides legacy credential migration, expiring HS256 JWTs, bounded revocation, masked user responses, and login-disabled anonymous compatibility. |
-| `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Implemented in Go | Todo 13 provides a revision-aware standard-library client with bounded, redacted HTTP behavior. Periodic login and Sonarr/Radarr rename workflows remain pending in Todo 15. |
-| `TransmissionServiceImpl` | RPC login/session, torrent lookup and rename | Implemented in Go | Todo 14 provides a revision-aware standard-library client plus a transparent compatibility proxy. The client supports anonymous or complete Basic Auth credentials, one bounded 409 session-ID replay, typed `session-get`, `torrent-get`, and `torrent-rename-path` operations, frozen-config rename operations, bounded I/O, and redacted errors. The proxy forwards caller data without injecting internal credentials/session state or retrying 409. Periodic login and Sonarr/Radarr rename workflows remain Todo 15. |
+| `QbittorrentServiceImpl` | downloader login, file lookup, torrent/file rename | Implemented in Go | Todo 13 provides a revision-aware standard-library client with bounded, redacted HTTP behavior. Todo 15 schedules startup login for qBittorrent and Transmission, recurring qBittorrent-only login refresh, and Sonarr/Radarr rename workflows; qBittorrent file renames remain optional. |
+| `TransmissionServiceImpl` | RPC login/session, torrent lookup and rename | Implemented in Go | Todo 14 provides a revision-aware standard-library client plus a transparent compatibility proxy. The client supports anonymous or complete Basic Auth credentials, one bounded 409 session-ID replay, typed `session-get`, `torrent-get`, and `torrent-rename-path` operations, frozen-config rename operations, bounded I/O, and redacted errors. The proxy forwards caller data without injecting internal credentials/session state or retrying 409. Todo 15 Sonarr/Radarr rename workflows dispatch Transmission torrent renames; they do not use Transmission file-level renames. |
 
 ## Transmission RPC Protocol Decision
 
@@ -244,8 +244,8 @@ proxies for bounded `GET` and `POST` requests below `/api/v2/`. They use the
 current runtime qBittorrent URL, preserve end-to-end request and response data,
 and reject traversal, redirects, hop-by-hop headers, oversize messages, and
 unconfigured upstreams. The routes do not perform login or use the internal
-downloader session. Periodic downloader login and Sonarr/Radarr rename workflows
-remain Todo 15 work.
+downloader session. Todo 15 implements the seven scheduled jobs described
+below; the proxy remains separate from that internal workflow.
 
 ## Todo 14 vs Todo 15 Boundary
 
@@ -263,16 +263,23 @@ Todo 14 covers the Transmission RPC client and compatibility proxy:
   automatic 409 retry.
 - Typed, bounded, and redacted client/proxy failures.
 
-Todo 15 covers scheduler/workflow integration:
+Todo 15 implements scheduler/workflow integration for these seven actual jobs:
 
-- Periodic Transmission login/session refresh workflows.
-- Scheduler-driven sync workflows.
-- Sonarr/Radarr event-driven rename workflows.
-- Filename policy enforcement.
+- `sonarr-title-sync`: DB-only Sonarr title sync followed by TMDB title sync.
+- `sonarr-rule-sync`: DB-only Sonarr rule sync.
+- `sonarr-rename`: DB-only Sonarr-history rename workflow; it dispatches a Transmission torrent rename and, when file rename is enabled, qBittorrent torrent/file renames.
+- `radarr-title-sync`: DB-only Radarr title sync.
+- `radarr-rule-sync`: DB-only Radarr rule sync.
+- `radarr-rename`: DB-only Radarr-history rename workflow; it dispatches a Transmission torrent rename and, when file rename is enabled, qBittorrent torrent/file renames.
+- `downloader-login`: runs once at startup for qBittorrent and Transmission, then refreshes qBittorrent only every 30 minutes.
 
-The public proxy does not implement Todo 15 features. The internal client's
-bounded session handshake is available for workflows, but periodic refresh and
-event-driven orchestration remain deferred.
+The public proxy does not implement these Todo 15 workflows. Scheduler runs
+receive cancellation and deadlines, skip overlapping callbacks, and wait for
+admitted work at shutdown; a callback that ignores its context cannot be
+forcibly stopped. Rename and sync work may have already committed an earlier
+downloader or database mutation when a later mutation or refresh fails, so they
+return the failure without pretending the overall workflow was atomic. DB config
+queries are side-effect free and never trigger rename work.
 
 Todo 16 remains deferred. It covers broad README, deployment, and operational
 documentation beyond this focused compatibility inventory.
