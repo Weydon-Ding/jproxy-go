@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"io"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -17,7 +19,10 @@ func (buffer *syncBuffer) Write(value []byte) (int, error) {
 	defer buffer.mu.Unlock()
 	buffer.value = append(buffer.value, value...)
 	if buffer.written != nil {
-		buffer.written <- struct{}{}
+		select {
+		case buffer.written <- struct{}{}:
+		default:
+		}
 	}
 	return len(value), nil
 }
@@ -28,7 +33,18 @@ func (buffer *syncBuffer) String() string {
 	return string(buffer.value)
 }
 
-func (buffer *syncBuffer) WaitWrite() { <-buffer.written }
+func (buffer *syncBuffer) WaitContains(t *testing.T, text string) {
+	t.Helper()
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for !strings.Contains(buffer.String(), text) {
+		select {
+		case <-buffer.written:
+		case <-deadline.C:
+			t.Fatalf("log output = %q, want %q", buffer.String(), text)
+		}
+	}
+}
 
 type fakeClock struct {
 	mu       sync.Mutex

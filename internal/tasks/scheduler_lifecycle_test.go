@@ -23,6 +23,7 @@ func TestScheduler_CancelsRunAtTimeoutAndRecovers(t *testing.T) {
 	}
 	started := make(chan struct{}, 2)
 	timedOut := make(chan struct{}, 1)
+	deadlineObserved := make(chan time.Time, 1)
 	var runs int
 	var lock sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,9 +35,14 @@ func TestScheduler_CancelsRunAtTimeoutAndRecovers(t *testing.T) {
 		lock.Unlock()
 		started <- struct{}{}
 		if run == 1 {
+			deadline, ok := runContext.Deadline()
+			if !ok {
+				t.Fatal("run context has no deadline")
+			}
+			deadlineObserved <- deadline
 			<-runContext.Done()
 			timedOut <- struct{}{}
-			return runContext.Err()
+			return errors.New("SUPER_SECRET")
 		}
 		return nil
 	}}); err != nil {
@@ -52,11 +58,17 @@ func TestScheduler_CancelsRunAtTimeoutAndRecovers(t *testing.T) {
 	// When
 	clock.Advance(time.Second)
 	receive(t, timedOut)
-	output.WaitWrite()
+	output.WaitContains(t, "error_kind=deadline_exceeded")
 	clock.WaitTimer()
 	clock.Advance(time.Second)
 
 	// Then
+	if got, want := <-deadlineObserved, time.Date(2026, 8, 7, 9, 0, 2, 0, time.UTC); !got.Equal(want) {
+		t.Fatalf("run context deadline = %v, want %v", got, want)
+	}
+	if !strings.Contains(output.String(), "error_kind=deadline_exceeded") {
+		t.Fatalf("log output = %q, want deadline_exceeded", output.String())
+	}
 	receive(t, started)
 	cancel()
 	scheduler.Wait()
@@ -130,7 +142,7 @@ func TestScheduler_LogsFailureAndContinues(t *testing.T) {
 
 	// Then
 	receive(t, completed)
-	output.WaitWrite()
+	output.WaitContains(t, "task.run.failed")
 	if !strings.Contains(output.String(), "task.run.failed") || !strings.Contains(output.String(), "job=failure") {
 		t.Fatalf("log output = %q, want failure event and job name", output.String())
 	}
@@ -161,7 +173,7 @@ func TestScheduler_logsStableFailureKindWithoutTaskErrorText(t *testing.T) {
 
 	// When
 	clock.Advance(time.Second)
-	output.WaitWrite()
+	output.WaitContains(t, "error_kind=task_failed")
 
 	// Then
 	log := output.String()

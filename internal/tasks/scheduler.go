@@ -34,6 +34,9 @@ type systemTimer struct{ *time.Timer }
 func (timer systemTimer) C() <-chan time.Time { return timer.Timer.C }
 
 // Job defines one recurring callback and an optional distinct startup callback.
+// Callbacks receive parent values plus scheduler cancellation/deadline semantics.
+// They must honor cancellation and return promptly: the scheduler does not
+// forcibly terminate a callback that ignores its context.
 type Job struct {
 	Name         string
 	Schedule     Schedule
@@ -140,9 +143,10 @@ func (scheduler *Scheduler) waitLoop(ctx context.Context, job Job) {
 }
 
 type jobState struct {
-	mu      sync.Mutex
-	running bool
-	waiting bool
+	mu             sync.Mutex
+	running        bool
+	waiting        bool
+	failureEpisode bool
 }
 
 func (scheduler *Scheduler) startRun(ctx context.Context, job Job, run func(context.Context) error, state *jobState) {
@@ -172,21 +176,39 @@ func (scheduler *Scheduler) startRun(ctx context.Context, job Job, run func(cont
 		state.waiting = false
 		state.running = true
 		state.mu.Unlock()
+		startedAt := scheduler.clock.Now()
 		runContext, cancel := scheduler.runContext(ctx)
 		err := run(runContext)
+		runContextErr := runContext.Err()
 		cancel()
+		failed := err != nil && ctx.Err() == nil
+		succeeded := err == nil && runContextErr == nil && ctx.Err() == nil
 		state.mu.Lock()
 		state.running = false
+		logFailure := failed && !state.failureEpisode
+		if failed {
+			state.failureEpisode = true
+		}
+		if succeeded {
+			state.failureEpisode = false
+		}
 		state.mu.Unlock()
 		<-scheduler.semaphore
-		if err != nil && ctx.Err() == nil {
-			scheduler.logger.Warn("task.run.failed", "job", job.Name, "error_kind", taskErrorKind(err))
+		if logFailure {
+			scheduler.logger.Warn("task.run.failed", "job", job.Name, "error_kind", taskErrorKind(err, runContextErr))
+			return
+		}
+		if succeeded {
+			duration := scheduler.clock.Now().Sub(startedAt)
+			scheduler.logger.Info("task.run.succeeded", "job", job.Name, "duration_category", durationCategory(duration), "duration_ms", duration.Milliseconds())
 		}
 	}()
 }
 
-func taskErrorKind(err error) string {
+func taskErrorKind(err, contextErr error) string {
 	switch {
+	case errors.Is(contextErr, context.DeadlineExceeded):
+		return "deadline_exceeded"
 	case errors.Is(err, context.Canceled):
 		return "context_canceled"
 	case errors.Is(err, context.DeadlineExceeded):
@@ -202,29 +224,13 @@ func (state *jobState) clearWaiting() {
 	state.mu.Unlock()
 }
 
-func (scheduler *Scheduler) runContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if scheduler.timeout <= 0 {
-		return context.WithCancel(parent)
-	}
-	runContext, cancel := context.WithTimeout(parent, scheduler.timeout)
-	timer := scheduler.clock.NewTimer(scheduler.timeout)
-	finished := make(chan struct{})
-	var watcher sync.WaitGroup
-	watcher.Add(1)
-	go func() {
-		defer watcher.Done()
-		defer timer.Stop()
-		select {
-		case <-timer.C():
-			cancel()
-		case <-parent.Done():
-			cancel()
-		case <-finished:
-		}
-	}()
-	return runContext, func() {
-		close(finished)
-		watcher.Wait()
-		cancel()
+func durationCategory(duration time.Duration) string {
+	switch {
+	case duration < time.Second:
+		return "under_1s"
+	case duration < time.Minute:
+		return "under_1m"
+	default:
+		return "one_minute_or_more"
 	}
 }
