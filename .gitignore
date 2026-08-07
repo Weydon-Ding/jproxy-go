@@ -43,6 +43,7 @@ go.work.sum
 # Local agent runtime artifacts and generated evidence
 /.omo/evidence/
 /.omo/run-continuation/
+/.omo/database/
 
 # IDE / OS
 .vscode/
