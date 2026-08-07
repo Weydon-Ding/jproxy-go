@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"path"
 	"strings"
+	"unicode"
 )
 
 type Torrent struct {
+	ID    int64
 	Name  string
 	Files []string
 }
@@ -34,8 +36,9 @@ func (response *torrentGetResponse) decodeArguments(arguments json.RawMessage) e
 }
 
 type torrentWire struct {
-	Name  *string     `json:"name"`
-	Files *[]fileWire `json:"files"`
+	ID    json.RawMessage `json:"id"`
+	Name  *string         `json:"name"`
+	Files *[]fileWire     `json:"files"`
 }
 
 type fileWire struct {
@@ -60,9 +63,9 @@ func (response *sessionGetResponse) decodeArguments(arguments json.RawMessage) e
 }
 
 type renamePathArguments struct {
-	IDs  []string `json:"ids"`
-	Path string   `json:"path"`
-	Name string   `json:"name"`
+	IDs  []int64 `json:"ids"`
+	Path string  `json:"path"`
+	Name string  `json:"name"`
 }
 
 func (renamePathArguments) requestArguments() {}
@@ -70,6 +73,7 @@ func (renamePathArguments) requestArguments() {}
 type renamePathResponse struct {
 	expectedPath string
 	expectedName string
+	expectedID   int64
 }
 
 func (response *renamePathResponse) decodeArguments(arguments json.RawMessage) error {
@@ -82,7 +86,7 @@ func (response *renamePathResponse) decodeArguments(arguments json.RawMessage) e
 		return ErrMalformedResponse
 	}
 	var id int64
-	if err := json.Unmarshal(wire.ID, &id); err != nil {
+	if err := json.Unmarshal(wire.ID, &id); err != nil || id <= 0 || id != response.expectedID {
 		return ErrMalformedResponse
 	}
 	return nil
@@ -92,8 +96,16 @@ func (c *Client) Torrent(ctx context.Context, hash string) (Torrent, error) {
 	if invalidHash(hash) {
 		return Torrent{}, ErrInvalidConfig
 	}
+	cfg, err := c.currentConfig()
+	if err != nil {
+		return Torrent{}, err
+	}
+	return c.torrent(ctx, cfg, hash)
+}
+
+func (c *Client) torrent(ctx context.Context, cfg config, hash string) (Torrent, error) {
 	var response torrentGetResponse
-	err := c.call(ctx, "torrent-get", torrentGetArguments{IDs: []string{hash}, Fields: []string{"name", "files"}}, &response)
+	err := c.call(ctx, cfg, "torrent-get", torrentGetArguments{IDs: []string{hash}, Fields: []string{"id", "name", "files"}}, &response)
 	if err != nil {
 		return Torrent{}, err
 	}
@@ -103,7 +115,11 @@ func (c *Client) Torrent(ctx context.Context, hash string) (Torrent, error) {
 	if len(response.Torrents) != 1 || response.Torrents[0].Name == nil || strings.TrimSpace(*response.Torrents[0].Name) == "" || response.Torrents[0].Files == nil {
 		return Torrent{}, ErrMalformedResponse
 	}
-	torrent := Torrent{Name: *response.Torrents[0].Name, Files: make([]string, len(*response.Torrents[0].Files))}
+	var id int64
+	if err := json.Unmarshal(response.Torrents[0].ID, &id); err != nil || id <= 0 {
+		return Torrent{}, ErrMalformedResponse
+	}
+	torrent := Torrent{ID: id, Name: *response.Torrents[0].Name, Files: make([]string, len(*response.Torrents[0].Files))}
 	for index, file := range *response.Torrents[0].Files {
 		if strings.TrimSpace(file.Name) == "" {
 			return Torrent{}, ErrMalformedResponse
@@ -130,29 +146,49 @@ func (c *Client) Files(ctx context.Context, hash string) ([]string, error) {
 }
 
 func (c *Client) Rename(ctx context.Context, hash, name string) error {
+	if invalidHash(hash) {
+		return ErrInvalidConfig
+	}
 	if !validRenameName(name) {
 		return ErrInvalidPath
 	}
-	current, err := c.Name(ctx, hash)
+	cfg, err := c.currentConfig()
 	if err != nil {
 		return err
 	}
-	return c.renamePath(ctx, hash, current, name)
+	torrent, err := c.torrent(ctx, cfg, hash)
+	if err != nil {
+		return err
+	}
+	return c.renamePath(ctx, cfg, torrent.ID, torrent.Name, name)
 }
 
 func (c *Client) RenameFile(ctx context.Context, hash, oldPath, newPath string) error {
-	if invalidHash(hash) || !validFilePath(oldPath) || !validFilePath(newPath) || path.Dir(oldPath) != path.Dir(newPath) {
+	if invalidHash(hash) {
+		return ErrInvalidConfig
+	}
+	if !validFilePath(oldPath) || !validFilePath(newPath) || path.Dir(oldPath) != path.Dir(newPath) {
 		return ErrInvalidPath
 	}
-	return c.renamePath(ctx, hash, oldPath, path.Base(newPath))
+	cfg, err := c.currentConfig()
+	if err != nil {
+		return err
+	}
+	torrent, err := c.torrent(ctx, cfg, hash)
+	if err != nil {
+		return err
+	}
+	return c.renamePath(ctx, cfg, torrent.ID, oldPath, path.Base(newPath))
 }
 
-func (c *Client) renamePath(ctx context.Context, hash, oldPath, name string) error {
-	arguments := renamePathArguments{IDs: []string{hash}, Path: oldPath, Name: name}
-	return c.call(ctx, "torrent-rename-path", arguments, &renamePathResponse{expectedPath: oldPath, expectedName: name})
+func (c *Client) renamePath(ctx context.Context, cfg config, id int64, oldPath, name string) error {
+	arguments := renamePathArguments{IDs: []int64{id}, Path: oldPath, Name: name}
+	return c.callMutation(ctx, cfg, "torrent-rename-path", arguments, &renamePathResponse{expectedPath: oldPath, expectedName: name, expectedID: id})
 }
 
 func invalidHash(value string) bool { return value == "" || containsControl(value) }
+
+func containsControl(value string) bool { return strings.IndexFunc(value, unicode.IsControl) >= 0 }
 
 func validRenameName(value string) bool {
 	return value != "" && strings.TrimSpace(value) != "" && !containsControl(value) && !strings.ContainsAny(value, `/\`) && value != "." && value != ".."

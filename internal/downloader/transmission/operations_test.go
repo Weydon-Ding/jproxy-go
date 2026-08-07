@@ -23,7 +23,7 @@ func TestClient_renamesTorrentAndFile_whenRequestsAreValid(t *testing.T) {
 			return
 		}
 		if requests[len(requests)-1].Method == "torrent-get" {
-			_, _ = io.WriteString(w, `{"result":"success","arguments":{"torrents":[{"name":"old-root","files":[{"name":"dir/old.mkv"}]}]}}`)
+			_, _ = io.WriteString(w, `{"result":"success","arguments":{"torrents":[{"id":7,"name":"old-root","files":[{"name":"dir/old.mkv"}]}]}}`)
 			return
 		}
 		if requests[len(requests)-1].Arguments.Path == "old-root" {
@@ -42,11 +42,11 @@ func TestClient_renamesTorrentAndFile_whenRequestsAreValid(t *testing.T) {
 	}
 
 	// Then
-	if err != nil || len(requests) != 4 {
+	if err != nil || len(requests) != 5 {
 		t.Fatal("unexpected rename result")
 	}
-	assertRenameArguments(t, requests[2], "old-root", "new-root")
-	assertRenameArguments(t, requests[3], "dir/old.mkv", "new.mkv")
+	assertRenameArguments(t, requests[2], "old-root", "new-root", []int64{7})
+	assertRenameArguments(t, requests[4], "dir/old.mkv", "new.mkv", []int64{7})
 }
 
 func TestClient_rejectsInvalidFileRename_whenPathEscapesSibling(t *testing.T) {
@@ -61,6 +61,52 @@ func TestClient_rejectsInvalidFileRename_whenPathEscapesSibling(t *testing.T) {
 	}
 }
 
+func TestClient_rejectsInvalidFileRenameHash_beforePath(t *testing.T) {
+	// Given
+	client := testClient(t, &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: "http://example.test"}})
+
+	// When
+	err := client.RenameFile(context.Background(), "", "", "")
+
+	// Then
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestClient_keepsRenameOnCapturedConfig_whenRevisionChangesAfterLookup(t *testing.T) {
+	// Given
+	lookedUp := make(chan struct{})
+	release := make(chan struct{})
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if decodeReceivedRequest(t, request.Body).Method != "torrent-get" {
+			t.Fatal("rename reached old endpoint after revision changed")
+		}
+		close(lookedUp)
+		<-release
+		_, _ = io.WriteString(w, `{"result":"success","arguments":{"torrents":[{"id":7,"name":"old-root","files":[]}]}}`)
+	}))
+	defer old.Close()
+	newRequests := 0
+	replacement := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { newRequests++ }))
+	defer replacement.Close()
+	provider := &mutableProvider{snapshot: runtime.Snapshot{TransmissionURL: old.URL, TransmissionRevision: 1}}
+	client := testClient(t, provider)
+	result := make(chan error, 1)
+	go func() { result <- client.Rename(context.Background(), "hash", "new-root") }()
+	<-lookedUp
+	provider.set(runtime.Snapshot{TransmissionURL: replacement.URL, TransmissionRevision: 2})
+
+	// When
+	close(release)
+	err := <-result
+
+	// Then
+	if !errors.Is(err, ErrConfigChanged) || newRequests != 0 {
+		t.Fatalf("err=%v new_requests=%d", err, newRequests)
+	}
+}
+
 func TestClient_marksUnknownAndMalformedTorrentResponses_whenLookupResponseIsIncomplete(t *testing.T) {
 	for _, body := range []string{
 		`{"result":"success","arguments":{"torrents":[]}}`,
@@ -69,8 +115,12 @@ func TestClient_marksUnknownAndMalformedTorrentResponses_whenLookupResponseIsInc
 		`{"result":"success","arguments":{"torrents":[{},{}]}}`,
 		`{"result":"success","arguments":{"torrents":[{"name":" "}]}}`,
 		`{"result":"success","arguments":{"torrents":[{"name":"root"}]}}`,
-		`{"result":"success","arguments":{"torrents":[{"name":"root","files":null}]}}`,
-		`{"result":"success","arguments":{"torrents":[{"name":"root","files":[{}]}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":0,"name":"root","files":[]}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":-1,"name":"root","files":[]}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":7.5,"name":"root","files":[]}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":"7","name":"root","files":[]}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":7,"name":"root","files":null}]}}`,
+		`{"result":"success","arguments":{"torrents":[{"id":7,"name":"root","files":[{}]}]}}`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			// Given
@@ -101,13 +151,17 @@ func TestClient_rejectsMalformedRenameAcknowledgements_whenResponseDoesNotConfir
 		`{"path":"old-root","name":"new-root"}`,
 		`{"path":"wrong","name":"new-root","id":7}`,
 		`{"path":"old-root","name":"wrong","id":7}`,
+		`{"path":"old-root","name":"new-root","id":0}`,
+		`{"path":"old-root","name":"new-root","id":-1}`,
 		`{"path":"old-root","name":"new-root","id":7.5}`,
+		`{"path":"old-root","name":"new-root","id":"7"}`,
+		`{"path":"old-root","name":"new-root","id":8}`,
 	} {
 		t.Run(arguments, func(t *testing.T) {
 			// Given
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if decodeReceivedRequest(t, r.Body).Method == "torrent-get" {
-					_, _ = io.WriteString(w, `{"result":"success","arguments":{"torrents":[{"name":"old-root","files":[]}]}}`)
+					_, _ = io.WriteString(w, `{"result":"success","arguments":{"torrents":[{"id":7,"name":"old-root","files":[]}]}}`)
 					return
 				}
 				_, _ = io.WriteString(w, `{"result":"success","arguments":`+arguments+`}`)
@@ -128,8 +182,9 @@ func TestClient_rejectsMalformedRenameAcknowledgements_whenResponseDoesNotConfir
 type receivedRequest struct {
 	Method    string `json:"method"`
 	Arguments struct {
-		Path string `json:"path"`
-		Name string `json:"name"`
+		IDs  json.RawMessage `json:"ids"`
+		Path string          `json:"path"`
+		Name string          `json:"name"`
 	} `json:"arguments"`
 }
 
@@ -142,9 +197,15 @@ func decodeReceivedRequest(t *testing.T, body io.Reader) receivedRequest {
 	return request
 }
 
-func assertRenameArguments(t *testing.T, request receivedRequest, path, name string) {
+func assertRenameArguments(t *testing.T, request receivedRequest, path, name string, wantIDs []int64) {
 	t.Helper()
-	if request.Method != "torrent-rename-path" || request.Arguments.Path != path || request.Arguments.Name != name {
+	var gotIDs []int64
+	if request.Method != "torrent-rename-path" || request.Arguments.Path != path || request.Arguments.Name != name || json.Unmarshal(request.Arguments.IDs, &gotIDs) != nil || len(gotIDs) != len(wantIDs) {
 		t.Fatal("unexpected torrent rename request")
+	}
+	for index, wantID := range wantIDs {
+		if gotIDs[index] != wantID {
+			t.Fatal("unexpected torrent rename request")
+		}
 	}
 }

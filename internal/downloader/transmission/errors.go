@@ -16,6 +16,7 @@ var (
 	ErrUnknownTorrent    = errors.New("Transmission torrent not found")
 	ErrSessionChallenge  = errors.New("Transmission session challenge failed")
 	ErrRequestTooLarge   = errors.New("Transmission request too large")
+	ErrConfigChanged     = errors.New("Transmission configuration changed during operation")
 )
 
 type HTTPError struct {
