@@ -1,10 +1,10 @@
 module jproxy-go
 
-go 1.22
+go 1.25.0
 
 require (
-	golang.org/x/crypto v0.31.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/sys v0.45.0
 	modernc.org/sqlite v1.36.1
 )
 
